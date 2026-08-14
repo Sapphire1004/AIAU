@@ -1,0 +1,28 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# エディタ
+.vscode/
+.idea/
+*.swp
+
+# ログ・一時ファイル
+*.log
+tmp/
+.cache/
+
+# 環境変数
+.env
+.env.*
+!.env.example
+
+# 依存関係・ビルド成果物
+node_modules/
+dist/
+build/
+coverage/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
