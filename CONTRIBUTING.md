@@ -3,7 +3,7 @@
 ## 開発フロー
 
 1. Issue を作成し、対応内容を明確にする。
-2. `main` から作業ブランチを作成する。ブランチ名は [BRANCHING.md](BRANCHING.md) の命名規則に従う。
+2. `main` から作業ブランチを作成する。ブランチ名は [BRANCHING.md](BRANCHING.md) の命名規則（`<username>/<type>/<short-description>`）に従う。
 3. 変更をコミットする。コミットメッセージは Conventional Commits に従う。
 4. リモートへ push し、Pull Request を作成する。
 5. レビュー承認と CI のパス後、Squash and merge でマージする。
@@ -12,9 +12,9 @@
 ```bash
 git switch main
 git pull origin main
-git switch -c feat/12-add-search-api
+git switch -c sora-33/feat/12-add-search-api
 # 変更・コミット
-git push -u origin feat/12-add-search-api
+git push -u origin sora-33/feat/12-add-search-api
 ```
 
 ## Pull Request
