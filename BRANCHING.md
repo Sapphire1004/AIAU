@@ -18,13 +18,16 @@ GitHub Flow をベースとした運用を行う。
 ## ブランチ命名規則
 
 ```
-<type>/<short-description>
-<type>/<issue-number>-<short-description>
+<username>/<type>/<short-description>
+<username>/<type>/<issue-number>-<short-description>
 ```
 
+- `<username>`: 作業者の GitHub ユーザー名（例: `sora-33`）。誰の作業ブランチかを一目で判別するため必須
 - `<type>`: 下表のいずれか（小文字）
 - `<issue-number>`: 関連する Issue 番号（任意。存在する場合は付与を推奨）
 - `<short-description>`: 変更内容を表す英小文字の要約。単語区切りはハイフン (`-`)。3〜5 語程度、50 文字以内
+
+ユーザー名は `git config user.name` ではなく GitHub のアカウント名を使用する。
 
 ### type 一覧
 
@@ -45,20 +48,20 @@ GitHub Flow をベースとした運用を行う。
 
 ### 命名の禁止事項
 
-- 大文字・空白・日本語・アンダースコア (`_`) は使用しない
-- `type` の省略、`/` 以外の区切り文字は使用しない
+- 大文字・空白・日本語・アンダースコア (`_`) は使用しない（ユーザー名に大文字が含まれる場合は小文字に変換する）
+- `<username>` や `<type>` の省略、`/` 以外の区切り文字は使用しない
 - 個人名のみ、`test`, `tmp`, `wip` などの意味を持たない名前は使用しない
 
 ### 例
 
 ```
-feat/user-login-form
-feat/12-add-search-api
-fix/34-null-pointer-on-signup
-docs/update-readme
-chore/init-project-scaffold
-hotfix/45-payment-timeout
-release/v1.0.0
+sora-33/feat/user-login-form
+sora-33/feat/12-add-search-api
+sora-33/fix/34-null-pointer-on-signup
+sora-33/docs/update-readme
+sora-33/chore/init-project-scaffold
+sora-33/hotfix/45-payment-timeout
+sora-33/release/v1.0.0
 ```
 
 ## コミットメッセージ
