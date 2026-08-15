@@ -11,6 +11,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom'
 import { ErrorState, LoadingState } from '@/components/layout/states'
 import { InvitePanel } from '@/components/trip/invite-panel'
+import { avatarToneClass } from '@/lib/avatar-tone'
 import { listMessages, sendMessage, subscribeToMessages } from '@/repositories/messages.repository'
 import {
   activateNote,
@@ -442,7 +443,12 @@ export function IdeasPage({ userId }: { userId: string }) {
                       role="img"
                     >
                       {members.slice(0, 3).map((member) => (
-                        <span aria-hidden="true" className="avatar" key={member.user_id} title={member.nickname}>
+                        <span
+                          aria-hidden="true"
+                          className={`avatar ${avatarToneClass(member.user_id)}`}
+                          key={member.user_id}
+                          title={member.nickname}
+                        >
                           {initialOf(member.nickname)}
                         </span>
                       ))}
@@ -464,7 +470,9 @@ export function IdeasPage({ userId }: { userId: string }) {
                   <Fragment key={message.id}>
                     {showDay && <div className="chat-day">{formatMessageDay(message.created_at)}</div>}
                     <article className={`message${mine ? ' mine' : ''}`} id={`message-${message.id}`}>
-                      <div aria-hidden="true" className="message-avatar">{initialOf(message.author_name)}</div>
+                      <div aria-hidden="true" className={`message-avatar ${avatarToneClass(message.author_id)}`}>
+                        {initialOf(message.author_name)}
+                      </div>
                       <div className="message-content">
                         <div className="message-meta">
                           <strong>{message.author_name}</strong>
@@ -816,16 +824,19 @@ const IDEAS_PAGE_STYLES = String.raw`
 .ideas-page .chat-panel { display: flex; flex-direction: column; }
 .ideas-page .chat-members { display: flex; align-items: center; gap: 8px; margin-top: 5px; color: var(--muted); font-size: 11px; }
 .ideas-page .avatar-stack { display: flex; }
-.ideas-page .avatar { width: 28px; height: 28px; margin-left: -5px; display: grid; place-items: center; border: 2px solid var(--surface); border-radius: 50%; color: #fff; background: #e5a36f; font-size: 11px; font-weight: 700; }
-.ideas-page .avatar:first-child { margin-left: 0; background: #668db9; }
-.ideas-page .avatar:last-child { background: #8d77b3; }
+.ideas-page .avatar { width: 28px; height: 28px; margin-left: -5px; display: grid; place-items: center; border: 2px solid var(--surface); border-radius: 50%; color: #fff; background: var(--avatar-strong, #668db9); font-size: 11px; font-weight: 700; }
+.ideas-page .avatar:first-child { margin-left: 0; }
+.ideas-page .avatar-tone-0 { --avatar-strong: #668db9; --avatar-soft: #e8eef5; --avatar-ink: #58718c; }
+.ideas-page .avatar-tone-1 { --avatar-strong: #e5a36f; --avatar-soft: #f6e9d9; --avatar-ink: #765b38; }
+.ideas-page .avatar-tone-2 { --avatar-strong: #8d77b3; --avatar-soft: #eee7f7; --avatar-ink: #725b9a; }
+.ideas-page .avatar-tone-3 { --avatar-strong: #6fa88a; --avatar-soft: #e4f1ea; --avatar-ink: #47705d; }
+.ideas-page .avatar-tone-4 { --avatar-strong: #c9788f; --avatar-soft: #f8e6ec; --avatar-ink: #8d4d61; }
+.ideas-page .avatar-tone-5 { --avatar-strong: #5f9aa8; --avatar-soft: #e3f0f3; --avatar-ink: #416c76; }
 .ideas-page .chat-messages { flex: 1; min-height: 0; overflow: auto; padding: 19px 18px; background: #fbfcfd; scroll-padding-block: 20px; }
 .ideas-page .chat-day { margin: 2px 0 16px; color: var(--muted); font-size: 10px; text-align: center; }
 .ideas-page .message { display: flex; gap: 9px; margin-bottom: 17px; scroll-margin-block: 20px; }
 .ideas-page .message.mine { flex-direction: row-reverse; }
-.ideas-page .message-avatar { flex: 0 0 30px; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: #e8eef5; color: #58718c; font-size: 11px; font-weight: 700; }
-.ideas-page .message:nth-of-type(2n) .message-avatar { color: #765b38; background: #f6e9d9; }
-.ideas-page .message:nth-of-type(3n) .message-avatar { color: #725b9a; background: #eee7f7; }
+.ideas-page .message-avatar { flex: 0 0 30px; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: var(--avatar-soft, #e8eef5); color: var(--avatar-ink, #58718c); font-size: 11px; font-weight: 700; }
 .ideas-page .message-content { min-width: 0; max-width: 83%; }
 .ideas-page .message-meta { display: flex; align-items: baseline; gap: 7px; margin-bottom: 4px; color: var(--muted); font-size: 10px; }
 .ideas-page .mine .message-meta { justify-content: flex-end; }
