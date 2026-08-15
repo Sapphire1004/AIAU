@@ -1,12 +1,16 @@
 import { useEffect, useState, type FormEvent, type InputHTMLAttributes } from 'react'
 import { ArrowRight, Link2, Plus } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { INVITE_QUERY_PARAM } from '@/lib/invite-link'
 import { storeInviteToken } from '@/lib/invite-token'
 import { createTrip, joinTrip, listTrips } from '@/repositories/trips.repository'
 import type { Trip } from '@/types/domain'
 
 export function HomePage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const invitedToken = searchParams.get(INVITE_QUERY_PARAM)?.trim() ?? ''
+  const [token, setToken] = useState(invitedToken)
   const [trips, setTrips] = useState<Trip[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -26,6 +30,10 @@ export function HomePage() {
   useEffect(() => {
     void refresh()
   }, [])
+
+  useEffect(() => {
+    if (invitedToken) setToken(invitedToken)
+  }, [invitedToken])
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -111,10 +119,29 @@ export function HomePage() {
             <div className="home-form-heading">
               <span className="tag manual"><Link2 aria-hidden="true" />招待から参加</span>
               <h3>旅行に参加する</h3>
-              <p>メンバーから共有された招待トークンと、表示する名前を入力します。</p>
+              <p>メンバーから共有された招待リンクを開くか、招待トークンと表示する名前を入力します。</p>
             </div>
-            <Field label="招待トークン" name="token" placeholder="共有されたトークン" required />
-            <Field id="home-join-nickname" label="あなたのニックネーム" name="nickname" placeholder="ゆき" required />
+            {invitedToken && (
+              <p className="home-invite-note" role="status">
+                招待リンクからトークンを読み込みました。ニックネームを入力して参加してください。
+              </p>
+            )}
+            <Field
+              label="招待トークン"
+              name="token"
+              onChange={(event) => setToken(event.currentTarget.value)}
+              placeholder="共有されたトークン"
+              required
+              value={token}
+            />
+            <Field
+              autoFocus={Boolean(invitedToken)}
+              id="home-join-nickname"
+              label="あなたのニックネーム"
+              name="nickname"
+              placeholder="ゆき"
+              required
+            />
             <button className="home-submit secondary-button" disabled={busy} type="submit">
               {busy ? '処理中…' : '参加する'}
             </button>
