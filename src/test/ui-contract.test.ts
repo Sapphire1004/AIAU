@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '@/components/layout/app-shell'
 import { HomePage } from '@/pages/home-page'
 import { getCalendarFeed } from '@/repositories/calendar.repository'
+import { extractNotes } from '@/services/ai.service'
 import {
   createInvite,
   createTrip,
@@ -176,6 +177,27 @@ describe('page repository contract', () => {
       onChange,
     )
     expect(subscribe).toHaveBeenCalled()
+  })
+
+  it('shows a specific configuration error returned by the OpenAI Edge Function', async () => {
+    const invoke = vi.fn().mockResolvedValue({
+      data: null,
+      error: {
+        message: 'Edge Function returned a non-2xx status code',
+        context: new Response(JSON.stringify({ error: 'OPENAI_API_KEY_NOT_CONFIGURED' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      },
+    })
+    getSupabaseMock.mockReturnValue({ functions: { invoke } })
+
+    await expect(extractNotes('trip-id', 'request-id')).rejects.toThrow(
+      'AI機能が設定されていません。管理者がOpenAI APIキーを設定してください。',
+    )
+    expect(invoke).toHaveBeenCalledWith('extract-notes', {
+      body: { trip_id: 'trip-id', idempotency_key: 'request-id' },
+    })
   })
 
   it('normalizes calendar RPC rows for the page model', async () => {

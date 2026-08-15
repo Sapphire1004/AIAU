@@ -17,15 +17,50 @@
 
 ## セットアップ
 
+### 1. 依存関係と環境変数
+
 ```bash
 npm install
-
-# 環境変数（Supabase の値はセットアップ担当から共有される）
 cp .env.example .env.local
-# .env.local に VITE_SUPABASE_URL と VITE_SUPABASE_PUBLISHABLE_KEY を記入
+```
 
+PowerShellでは次を実行します。
+
+```powershell
+Copy-Item .env.example .env.local
+```
+
+ルートの`.env.local`へFrontend・OpenAI・Web Pushの値をまとめて記入します。
+
+```dotenv
+VITE_SUPABASE_URL=
+VITE_SUPABASE_PUBLISHABLE_KEY=
+VITE_VAPID_PUBLIC_KEY=
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4o-mini
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=
+```
+
+Viteがブラウザへ公開するのは`VITE_`で始まる変数だけです。`OPENAI_API_KEY`と`VAPID_PRIVATE_KEY`はFrontend bundleへ含まれず、Edge Functionsだけが`--env-file .env.local`経由で読み取ります。
+
+### 2. ローカル起動
+
+SupabaseとEdge Functionsを起動します。
+
+```bash
+npx supabase start
+npx supabase functions serve --env-file .env.local
+```
+
+別ターミナルでFrontendを起動します。
+
+```bash
 npm run dev
 ```
+
+`OPENAI_API_KEY`が未設定・無効、またはOpenAI APIが失敗した場合、AI処理は付箋・プランを自動生成せず画面へエラーを表示します。
 
 | コマンド | 内容 |
 | --- | --- |
@@ -39,7 +74,7 @@ npm run dev
 | `npm run db:test` | pgTAP DB テスト |
 | `npm run types:generate` | ローカル DB から TypeScript 型を生成 |
 
-Hosted Supabase では Anonymous Sign-Ins を有効化する。Web Push を利用する場合は Edge Function Secrets に `VAPID_PUBLIC_KEY`、`VAPID_PRIVATE_KEY`、`VAPID_SUBJECT` を設定し、公開鍵を `VITE_VAPID_PUBLIC_KEY` に設定する。
+Hosted SupabaseではAnonymous Sign-Insを有効化し、`npx supabase secrets set --env-file .env.local --project-ref <project-ref>`でEdge Function Secretsを反映します。Edge Functionsが利用するのは`OPENAI_API_KEY`、`OPENAI_MODEL`、`VAPID_PUBLIC_KEY`、`VAPID_PRIVATE_KEY`、`VAPID_SUBJECT`です。Frontendには`VITE_`で始まる公開値だけを配布します。
 
 バックエンドと Supabase の構成は [docs/backend-supabase-plan.md](docs/backend-supabase-plan.md) を参照。
 

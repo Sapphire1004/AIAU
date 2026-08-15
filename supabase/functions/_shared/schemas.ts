@@ -17,7 +17,7 @@ export const noteOperations = z.object({
       z.object({
         op: z.literal('add'),
         title: z.string().trim().min(1).max(60),
-        memo: z.string().max(2000).optional().default(''),
+        memo: z.string().max(2000).nullable().optional().default(''),
         attrs: noteAttrs.optional().default({}),
         source: z.string().uuid(),
       }),
@@ -56,7 +56,7 @@ export const generatedPlan = z.object({
           attrs: z.record(z.string(), z.unknown()).default({}),
           reason: z.string().max(1000).optional(),
         }),
-      ),
+      ).min(1),
     }),
-  ),
+  ).min(1),
 })

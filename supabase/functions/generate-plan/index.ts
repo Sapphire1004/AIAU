@@ -1,7 +1,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { z } from 'npm:zod@4.4.3'
 import { corsHeaders, errorResponse, jsonResponse } from '../_shared/http.ts'
-import { callJsonModel, sha256 } from '../_shared/llm.ts'
+import { callOpenAIJson, OpenAIError, sha256 } from '../_shared/llm.ts'
 import { generatedPlan } from '../_shared/schemas.ts'
 import { createServiceClient, requireUser } from '../_shared/supabase.ts'
 
@@ -12,74 +12,6 @@ const requestSchema = z.object({
   regenerate: z.boolean().default(false),
   idempotency_key: z.string().min(1).max(200),
 })
-
-type Note = {
-  id: string
-  title: string
-  attrs: Record<string, unknown>
-  x: number
-  y: number
-}
-
-type BusyEvent = { start_at: string; end_at: string }
-
-function durationMinutes(note: Note): number {
-  const value = note.attrs.duration
-  if (typeof value === 'number' && Number.isFinite(value) && value > 0) return Math.round(value)
-  if (typeof value === 'string') {
-    const minutes = value.match(/([0-9]+)\s*分/)
-    if (minutes) return Number(minutes[1])
-    const hours = value.match(/([0-9]+(?:\.[0-9]+)?)\s*時間/)
-    if (hours) return Math.round(Number(hours[1]) * 60)
-  }
-  return 90
-}
-
-function nextFreeStart(candidate: Date, duration: number, busy: BusyEvent[]): Date {
-  let current = new Date(candidate)
-  for (;;) {
-    const end = new Date(current.getTime() + duration * 60_000)
-    const collision = busy.find(
-      (event) => new Date(event.start_at).getTime() < end.getTime() && new Date(event.end_at).getTime() > current.getTime(),
-    )
-    if (!collision) return current
-    current = new Date(collision.end_at)
-  }
-}
-
-function fallbackPlan(notes: Note[], trip: { starts_at: string | null; ends_at: string | null }, busy: BusyEvent[]) {
-  const defaultStart = new Date()
-  defaultStart.setUTCDate(defaultStart.getUTCDate() + 1)
-  defaultStart.setUTCHours(0, 0, 0, 0)
-  let cursor = trip.starts_at ? new Date(trip.starts_at) : defaultStart
-  const tripEnd = trip.ends_at ? new Date(trip.ends_at) : new Date(cursor.getTime() + 12 * 60 * 60_000)
-  const slots: Array<Record<string, unknown>> = []
-
-  for (const note of [...notes].sort((left, right) => left.y - right.y || left.x - right.x)) {
-    const duration = durationMinutes(note)
-    cursor = nextFreeStart(cursor, duration, busy)
-    const end = new Date(cursor.getTime() + duration * 60_000)
-    if (end > tripEnd) break
-    slots.push({
-      start_at: cursor.toISOString(),
-      end_at: end.toISOString(),
-      options: [
-        {
-          note_id: note.id,
-          title: note.title,
-          start_at: cursor.toISOString(),
-          end_at: end.toISOString(),
-          kind: 'activity',
-          attrs: note.attrs,
-          reason: '付箋の順序・希望時間・所要時間をもとに配置',
-        },
-      ],
-    })
-    cursor = new Date(end.getTime() + 30 * 60_000)
-  }
-
-  return { slots }
-}
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
@@ -165,17 +97,36 @@ Deno.serve(async (request) => {
       notes: notesResult.data,
       busy_intervals: busyResult.data,
     }
-    const system =
-      'Create a feasible travel timeline as JSON {slots:[{start_at,end_at,options:[...]}]}. Use ISO 8601 offsets. Each option needs note_id, title, start_at, end_at, kind, attrs, reason. Respect busy intervals and trip bounds.'
-    const modelResult = await callJsonModel(system, input)
-    const parsed = generatedPlan.parse(
-      modelResult ??
-        fallbackPlan(
-          notesResult.data as Note[],
-          tripResult.data,
-          busyResult.data as BusyEvent[],
-        ),
-    )
+    const system = [
+      'Return exactly one JSON object with a slots array and no other text.',
+      'Each slot must be {"start_at":"ISO 8601 with offset","end_at":"ISO 8601 with offset","options":[...]}.',
+      'Each option must be {"note_id":"existing note UUID or null","title":"string","start_at":"ISO 8601 with offset","end_at":"ISO 8601 with offset","kind":"activity|travel|all_day|placeholder","attrs":{},"reason":"string"}.',
+      'Every activity option must reference an id from notes in note_id and must represent that note. Never invent restaurants, destinations, shopping, or activities that are not in notes.',
+      'Only travel or placeholder options may use a null note_id. Include every active note exactly once as an activity.',
+      'Honor duration and time_hint from each note attrs, including exact requested clock times.',
+      'Include at least one option in every slot. Respect the trip start, trip end, timezone, budget, and every busy interval.',
+      'Do not overlap slots or busy intervals. Ensure every end_at is after start_at.',
+    ].join(' ')
+    let parsed: z.infer<typeof generatedPlan>
+    try {
+      parsed = generatedPlan.parse(await callOpenAIJson(system, input))
+    } catch (error) {
+      if (error instanceof OpenAIError) throw error
+      if (error instanceof z.ZodError) throw new OpenAIError('OPENAI_RESPONSE_INVALID', 502)
+      throw error
+    }
+
+    const noteIds = new Set(notesResult.data.map((note) => note.id))
+    for (const slot of parsed.slots) {
+      for (const option of slot.options) {
+        if (option.note_id && !noteIds.has(option.note_id)) {
+          throw new OpenAIError('OPENAI_RESPONSE_INVALID', 502)
+        }
+        if (option.kind === 'activity' && !option.note_id) {
+          throw new OpenAIError('OPENAI_RESPONSE_INVALID', 502)
+        }
+      }
+    }
 
     const applied = await client.rpc('apply_plan_command', {
       p_plan_id: body.plan_id,
@@ -202,11 +153,11 @@ Deno.serve(async (request) => {
         .update({
           status: 'failed',
           finished_at: new Date().toISOString(),
-          error_code: 'GENERATE_PLAN_FAILED',
+          error_code: error instanceof OpenAIError ? error.code : 'GENERATE_PLAN_FAILED',
           error_message: error instanceof Error ? error.message.slice(0, 1000) : 'Unknown error',
         })
         .eq('id', runId)
     }
-    return errorResponse(error)
+    return errorResponse(error, error instanceof OpenAIError ? error.status : 400)
   }
 })
