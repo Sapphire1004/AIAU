@@ -20,9 +20,14 @@ tmp/
 # 依存関係・ビルド成果物
 node_modules/
 dist/
+dist-ssr/
 build/
 coverage/
 __pycache__/
 *.py[cod]
 .venv/
 venv/
+
+# Vite
+*.local
+*.tsbuildinfo
