@@ -1,6 +1,6 @@
 import { requireData, throwIfError } from '@/lib/errors'
 import { getSupabase } from '@/lib/supabase'
-import type { CreateTripInput, CreateTripResult, Plan, Trip, TripMember } from '@/types/domain'
+import type { CreateTripInput, CreateTripResult, Plan, Trip, TripInvite, TripMember } from '@/types/domain'
 
 export async function listTrips(): Promise<Trip[]> {
   const { data, error } = await getSupabase().from('trips').select('*').order('updated_at', { ascending: false })
@@ -60,6 +60,16 @@ export async function getPlanForTrip(tripId: string): Promise<Plan> {
   const { data, error } = await getSupabase().from('plans').select('*').eq('trip_id', tripId).single()
   throwIfError(error)
   return requireData(data, 'Plan was not found')
+}
+
+export async function listInvites(tripId: string): Promise<TripInvite[]> {
+  const { data, error } = await getSupabase()
+    .from('trip_invites')
+    .select('*')
+    .eq('trip_id', tripId)
+    .order('created_at', { ascending: false })
+  throwIfError(error)
+  return data ?? []
 }
 
 export async function createInvite(tripId: string, expiresAt?: string): Promise<string> {

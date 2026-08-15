@@ -3,6 +3,7 @@ import type { Database, Json } from '@/types/database'
 export type Tables = Database['public']['Tables']
 export type Trip = Tables['trips']['Row']
 export type TripMember = Tables['trip_members']['Row']
+export type TripInvite = Tables['trip_invites']['Row']
 export type Message = Tables['messages']['Row']
 export type Note = Tables['notes']['Row']
 export type NoteInsert = Tables['notes']['Insert']

@@ -5,7 +5,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '@/components/layout/app-shell'
 import { HomePage } from '@/pages/home-page'
 import { getCalendarFeed } from '@/repositories/calendar.repository'
-import { createTrip, joinTrip, listTrips } from '@/repositories/trips.repository'
+import {
+  createInvite,
+  createTrip,
+  joinTrip,
+  listInvites,
+  listTrips,
+  revokeInvite,
+} from '@/repositories/trips.repository'
 
 const { getSupabaseMock } = vi.hoisted(() => ({
   getSupabaseMock: vi.fn(),
@@ -115,6 +122,39 @@ describe('page repository contract', () => {
       p_invite_token: 'invite-token',
       p_nickname: 'member',
     })
+  })
+
+  it('lists trip invites for the owner-facing invite panel', async () => {
+    const order = vi.fn().mockResolvedValue({
+      data: [{ id: 'invite-id', trip_id: 'trip-id', revoked_at: null, expires_at: null }],
+      error: null,
+    })
+    const eq = vi.fn().mockReturnValue({ order })
+    const select = vi.fn().mockReturnValue({ eq })
+    const from = vi.fn().mockReturnValue({ select })
+    getSupabaseMock.mockReturnValue({ from })
+
+    await expect(listInvites('trip-id')).resolves.toHaveLength(1)
+    expect(from).toHaveBeenCalledWith('trip_invites')
+    expect(eq).toHaveBeenCalledWith('trip_id', 'trip-id')
+    expect(order).toHaveBeenCalledWith('created_at', { ascending: false })
+  })
+
+  it('passes invite issue and revoke arguments to the owner-only RPCs', async () => {
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({ data: 'issued-token', error: null })
+      .mockResolvedValueOnce({ data: null, error: null })
+    getSupabaseMock.mockReturnValue({ rpc })
+
+    await expect(createInvite('trip-id', '2026-08-20T00:00:00.000Z')).resolves.toBe('issued-token')
+    await expect(revokeInvite('invite-id')).resolves.toBeUndefined()
+
+    expect(rpc).toHaveBeenNthCalledWith(1, 'create_trip_invite', {
+      p_trip_id: 'trip-id',
+      p_expires_at: '2026-08-20T00:00:00.000Z',
+    })
+    expect(rpc).toHaveBeenNthCalledWith(2, 'revoke_trip_invite', { p_invite_id: 'invite-id' })
   })
 
   it('normalizes calendar RPC rows for the page model', async () => {

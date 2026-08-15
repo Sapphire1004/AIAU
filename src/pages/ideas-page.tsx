@@ -10,6 +10,7 @@ import {
 } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ErrorState, LoadingState } from '@/components/layout/states'
+import { InvitePanel } from '@/components/trip/invite-panel'
 import { listMessages, sendMessage, subscribeToMessages } from '@/repositories/messages.repository'
 import {
   activateNote,
@@ -56,6 +57,10 @@ export function IdeasPage({ userId }: { userId: string }) {
 
   const nickname = useMemo(
     () => members.find((member) => member.user_id === userId)?.nickname ?? '匿名ユーザー',
+    [members, userId],
+  )
+  const isOwner = useMemo(
+    () => members.some((member) => member.user_id === userId && member.role === 'owner'),
     [members, userId],
   )
   const membersById = useMemo(
@@ -288,6 +293,7 @@ export function IdeasPage({ userId }: { userId: string }) {
             <p>チャットから見つけた「やりたい」を、みんなで育てよう。</p>
           </div>
           <div className="title-actions">
+            <InvitePanel canManage={isOwner} tripId={tripId} />
             <button
               className="secondary-button"
               id="add-note-button"
