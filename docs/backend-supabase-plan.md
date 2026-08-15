@@ -26,7 +26,7 @@ AIAU の 3 画面を支える共通バックエンドと Supabase 連携の実�
 - SQL RPC、Edge Functions
 - AI 抽出・旅程生成
 - 投票、変更履歴、非破壊復元
-- 外部カレンダー、通知、共有、オフライン同期
+- 通知、共有、オフライン同期（外部カレンダー連携は将来拡張）
 
 sora さんが作るモックは、後述する DTO と同じ形の fixture を使う。視覚設計とデータ契約を分離し、UI 完成前でもバックエンドを進められる状態にする。
 
@@ -35,8 +35,7 @@ sora さんが作るモックは、後述する DTO と同じ形の fixture を�
 - バックエンドは Supabase Postgres / Auth / RLS / Realtime / RPC / Edge Functions で構成し、別の常駐 API サーバーは初期導入しない。
 - MVP は画面 3 の第 1 段階・第 2 段階を両方含む。
 - ユーザーは Supabase 匿名 Auth で利用開始する。
-- Google Calendar 接続時に匿名アカウントへ Google identity をリンクし、同じ `auth.uid()` のまま正式アカウントへ昇格する。
-- 外部カレンダーは provider 共通契約を作り、MVP では Google provider を実装する。
+- MVP の外部カレンダー連携は ics エクスポートのみとし、Google Calendar の OAuth・取り込み・双方向同期は将来拡張とする。
 - 通知はアプリ内通知と Web Push の両方を実装する。
 - オフライン競合は自動上書きせず、ローカル版 / サーバー版をユーザーが選択する。
 - 投票は時間帯スロット単位で、1 参加者につき 1 スロット 1 票。票は変更できる。
@@ -50,7 +49,7 @@ sora さんが作るモックは、後述する DTO と同じ形の fixture を�
 
 - 予約・決済
 - チケット画像等の Storage 添付
-- 複数の外部カレンダー provider の実装（共通契約のみ用意し、MVP 実装は Google）
+- Google Calendar を含む外部カレンダーの OAuth・予定取り込み・双方向同期
 - 参加者別の別行動レーン
 - 網羅的な鉄道ダイヤ・施設営業時間 API
 - 旅行案へのコメント機能
@@ -66,9 +65,7 @@ flowchart LR
   Client --> RPC[SQL RPC]
   Client --> EF[Edge Functions]
   EF --> LLM[LLM API]
-  EF --> Google[Google Calendar API]
   EF --> Push[Web Push Service]
-  EF --> Vault[Secrets / Vault]
   EF --> DB
 ```
 
@@ -78,14 +75,14 @@ flowchart LR
 | --- | --- |
 | 単一テーブルの単純 CRUD | Supabase Client + RLS |
 | 複数テーブルをまとめて更新する処理 | SQL RPC |
-| LLM、OAuth、外部 API、Web Push | Edge Functions |
+| LLM、Web Push、ics 生成 | Edge Functions |
 | 共同編集の確定結果 | Postgres Changes |
 | ドラッグ中の一時座標 | Realtime Broadcast |
 
 ### 4.2 共通原則
 
 - 画面 2 と画面 3 のプラン予定を複製しない。同じ正規レコードを両画面から参照する。
-- 画面 3 のカレンダー feed は、確定プラン予定・個人予定・外部予定を期間指定で統合する。
+- 画面 3 の MVP カレンダー feed は、確定プラン予定と個人予定を期間指定で統合する。外部予定は将来拡張で追加する。
 - DB の時刻は `timestamptz`、旅行・ユーザーの timezone は IANA timezone 名で別途保持する。Client / RPC 間では UTC または offset 付き ISO 8601 を使用し、表示時だけ対象 timezone へ変換する。
 - 更新対象には `updated_at` と必要に応じて `revision` を持たせる。
 - 履歴・外部同期対象は物理削除せず、`deleted_at` または active 状態で論理削除する。
@@ -104,9 +101,6 @@ supabase/
     _shared/
     extract-notes/
     generate-plan/
-    calendar-oauth-start/
-    calendar-oauth-callback/
-    sync-calendar/
     dispatch-push/
     export-ics/
     public-plan/
@@ -182,23 +176,17 @@ AI の二重適用を防ぐため、未処理発言を `ai_runs` 単位で原子
 
 `plan_versions.snapshot` は slot、option、確定状態を保存する。投票は保存せず、復元処理でも `votes` を更新しない。非アクティブ候補を指す票は集計対象外とする。
 
-### 6.3 画面 3・外部連携・通知
+### 6.3 画面 3・通知・共有（MVP）
 
 | テーブル | 役割 | 主要フィールド・制約 |
 | --- | --- | --- |
 | `personal_events` | ユーザー本人の予定 | user_id、title、start_at、end_at、all_day、reminder、revision |
-| `calendar_connections` | provider 接続 | user_id、provider、mode、token_ref、status |
-| `external_calendars` | 接続先カレンダー | connection_id、provider_calendar_id、sync_cursor |
-| `external_events` | 外部予定 mirror | calendar_id、provider_event_id、etag、base_state、sync_status、deleted_at |
-| `sync_conflicts` | 同期競合 | local_state、remote_state、base_state、resolution、resolved_at |
 | `notifications` | アプリ内通知 | user_id、type、title、body、link、read_at、dedupe_key |
 | `push_subscriptions` | Web Push 購読 | user_id、endpoint、keys、expires_at、revoked_at |
 | `share_links` | 閲覧専用リンク | plan_id、token_hash、expires_at、revoked_at |
 | `public_rate_limits` | 公開リンクの時間窓別カウンタ | token_hash、window_start、request_count、expires_at |
 
-- OAuth token は Client や public table に返さず、Supabase Vault に保存する。provider API 呼び出しは Edge Functions に限定し、Edge Function だけが実行できる権限限定 RPC 経由で Vault の token を取得する。Client role から Vault と当該 RPC への権限を revoke する。
-- `provider + provider_calendar_id`、`calendar_id + provider_event_id` を一意にする。
-- public share は確定プラン予定のみ返し、個人予定・外部予定を含めない。
+public share は確定プラン予定のみ返し、個人予定を含めない。外部カレンダー接続用テーブルは将来拡張で追加する。
 
 ## 7. Auth・招待・RLS
 
@@ -207,10 +195,8 @@ AI の二重適用を防ぐため、未処理発言を `ai_runs` 単位で原子
 1. 未ログイン時に `signInAnonymously` を実行する。
 2. 招待 URL から参加するとき、旅行ごとの nickname を入力する。
 3. `join_trip` が token を検証し、`trip_members` を登録する。
-4. Supabase Auth の manual identity linking を有効化し、Google Calendar 接続時に `linkIdentity` で Google identity をログイン中の匿名ユーザーへリンクする。
-5. identity link は既存ユーザーへ identity を追加するため、同じ `auth.uid()` と既存の旅行・予定の所有権を維持する。
 
-匿名状態はブラウザの保存データに依存する。Google 接続前にサインアウト、ブラウザデータ削除、別ブラウザ・別端末利用を行った場合は同じ匿名アカウントへ戻れない。
+匿名状態はブラウザの保存データに依存する。サインアウト、ブラウザデータ削除、別ブラウザ・別端末利用を行った場合は同じ匿名アカウントへ戻れない。正式アカウントへの昇格は外部カレンダー連携と合わせて将来拡張で設計する。
 
 ### 7.2 旅行作成・参加
 
@@ -232,7 +218,6 @@ AI の二重適用を防ぐため、未処理発言を `ai_runs` 単位で原子
 | `votes` | member | 自分の票だけ upsert / delete |
 | `plan_versions` | member | direct write 禁止、RPC のみ |
 | `personal_events` | owner のみ | owner のみ |
-| 外部カレンダー・外部予定 | owner のみ | owner / Edge Function のみ |
 | `notifications` / Push 購読 | owner のみ | owner / Edge Function のみ |
 | 閲覧専用リンク | table 直読み不可 | Edge Function が token 検証後に限定 DTO を返す |
 
@@ -244,7 +229,7 @@ AI の二重適用を防ぐため、未処理発言を `ai_runs` 単位で原子
 | --- | --- |
 | `trip:{trip_id}` | messages、notes、旅行参加状態 |
 | `plan:{plan_id}` | slots、options、votes、versions |
-| `user:{user_id}` | personal / external events、notifications、sync conflicts |
+| `user:{user_id}` | personal events、notifications |
 
 - DB Changes の publication は必要テーブルだけに限定する。
 - 付箋・予定のドラッグ中は Broadcast を 50ms 単位で throttle する。
@@ -252,7 +237,7 @@ AI の二重適用を防ぐため、未処理発言を `ai_runs` 単位で原子
 - 旅行・プラン切替時は旧 channel を unsubscribe する。
 - 投票、確定、変更履歴、通知は DB Changes で反映する。
 - 付箋ドラッグの確定位置が競合した場合は、画面 1 の S1-21 に従って last-write-wins とする。
-- プラン、カレンダー、外部・オフライン同期の同時更新は `revision` / `expected_version` で検知し、黙って後勝ちにしない。
+- プラン、カレンダー、オフライン同期の同時更新は `revision` / `expected_version` で検知し、黙って後勝ちにしない。
 
 ## 9. RPC 契約
 
@@ -266,10 +251,10 @@ AI の二重適用を防ぐため、未処理発言を `ai_runs` 単位で原子
 | `cast_vote(slot_id, option_id)` | 自分の票を upsert |
 | `confirm_option(slot_id, option_id, expected_version)` | 得票検証、確定、履歴追加 |
 | `restore_plan_version(plan_id, version, expected_version)` | snapshot 復元と restore version 追加 |
-| `resolve_sync_conflict(conflict_id, resolution)` | local / remote の選択結果を適用 |
-| `get_calendar_feed(from, to, timezone)` | caller が参加する旅行の確定プラン予定と、caller 本人の個人予定・外部予定を期間指定で統合 |
+| `resolve_offline_conflict(conflict_id, resolution)` | local / server の選択結果を適用 |
+| `get_calendar_feed(from, to, timezone)` | caller が参加する旅行の確定プラン予定と、caller 本人の個人予定を期間指定で統合 |
 
-`get_calendar_feed` は `auth.uid()` を caller とし、caller が `trip_members` に含まれる旅行の確定プラン予定と、`user_id = auth.uid()` の個人・外部予定だけを返す。他ユーザーの個人・外部予定は、同じ旅行の参加者であっても返さない。
+`get_calendar_feed` は `auth.uid()` を caller とし、caller が `trip_members` に含まれる旅行の確定プラン予定と、`user_id = auth.uid()` の個人予定だけを返す。他ユーザーの個人予定は、同じ旅行の参加者であっても返さない。
 
 `apply_plan_command` は認可、入力検証、対象行更新、`current_version` 更新、snapshot 追加までを 1 transaction で行う。
 
@@ -282,7 +267,7 @@ AI の二重適用を防ぐため、未処理発言を `ai_runs` 単位で原子
 - `INVALID_INPUT`
 - `VERSION_CONFLICT`
 - `INVALID_OPTION`
-- `SYNC_CONFLICT`
+- `OFFLINE_CONFLICT`
 
 再送可能な RPC / Edge Function は idempotency key を受け付ける。
 
@@ -291,10 +276,7 @@ AI の二重適用を防ぐため、未処理発言を `ai_runs` 単位で原子
 | Function | 役割 |
 | --- | --- |
 | `extract-notes` | 未処理発言を claim し、LLM operation を検証して適用 |
-| `generate-plan` | 付箋・旅行条件・busy 時間から slots / options を生成 |
-| `calendar-oauth-start` | Google OAuth state / PKCE を作成 |
-| `calendar-oauth-callback` | state / PKCE 検証、token 交換、接続保存 |
-| `sync-calendar` | provider adapter で pull / push、競合保存 |
+| `generate-plan` | 付箋・旅行条件・個人予定の busy 時間から slots / options を生成 |
 | `dispatch-push` | VAPID 秘密鍵で Web Push 送信 |
 | `export-ics` | 確定プランを `text/calendar` で返す |
 | `public-plan` | share token 検証後にプラン予定だけ返す |
@@ -309,7 +291,7 @@ AI の二重適用を防ぐため、未処理発言を `ai_runs` 単位で原子
 - idempotency
 - 外部 API 失敗時のフォールバック
 
-具体的な timeout は各 Function の実装PRで Supabase と provider の上限を確認して固定する。値が未定の間は暗黙の自動 retry を行わない。retry は idempotency を保証できる読み取り・同期処理に限定して指数 backoff を使い、LLM の結果適用は同じ idempotency key による明示再送だけを許可する。
+具体的な timeout は各 Function の実装PRで Supabase と呼び出し先サービスの上限を確認して固定する。値が未定の間は暗黙の自動 retry を行わない。retry は idempotency を保証できる読み取り・通知処理に限定して指数 backoff を使い、LLM の結果適用は同じ idempotency key による明示再送だけを許可する。
 
 ## 11. AI 契約
 
@@ -333,7 +315,7 @@ AI の二重適用を防ぐため、未処理発言を `ai_runs` 単位で原子
 - 旅行の日付、開始 / 終了、timezone、出発地、予算
 - active notes と位置・近接情報
 - held / user_touched 情報
-- personal / external event の busy 時間
+- personal event の busy 時間
 - 再生成時の現行プランと人手編集済み候補
 
 出力:
@@ -380,7 +362,7 @@ schema 遵守や同一対象判定が不安定な場合は、モデル変更ま�
 - 画面 3 は同じ option を calendar feed 経由で読む。
 - 画面 3 からのプラン予定編集も `calendar_edit` command で同じ option を更新する。
 - 画面 3 からの更新時も version と参加者通知を作る。
-- 個人予定・外部予定は画面 2 へコピーせず、busy interval として衝突検知だけに利用する。
+- 個人予定は画面 2 へコピーせず、busy interval として衝突検知だけに利用する。
 
 ## 13. 投票・確定
 
@@ -416,45 +398,27 @@ version を作る操作:
 - version 一覧はページングし、snapshot 本体は選択された version だけ取得する。
 - 履歴保持期間と削除・アーカイブ方針は `feat(history)` PR のマージ条件として確定し、無期限保持を暗黙の既定値にしない。
 
-## 15. 外部カレンダー
+## 15. ICS と将来の外部カレンダー連携
 
-provider adapter は以下の操作を共通化する。
+### 15.1 MVP
 
-- authorization URL の生成
-- token 交換・更新
-- calendar 一覧取得
-- 差分 pull
-- local change の push
-- 接続解除
+MVP の外部カレンダー機能は、確定プランの ics エクスポートだけとする。
 
-MVP では Google provider を実装する。Outlook / Apple 等は adapter の追加で対応する。
+- 確定した activity、travel、all-day 予定を `text/calendar` として生成する。
+- timezone、開始・終了、場所、説明を含める。
+- 認証情報や個人予定を含めない。
+- 外部カレンダーからの予定取り込み、OAuth、双方向同期、外部予定との競合解決は実装しない。
 
-### 15.1 Google 接続
+### 15.2 将来拡張
 
-1. 匿名アカウントへ Google identity をリンクする。
-2. Edge Function が Calendar consent を開始する。
-3. OAuth state と PKCE を検証する。
-4. refresh token を Supabase Vault へ保存する。
-5. 利用者が calendar と read-only / bidirectional mode を選択する。
-6. token 更新時に provider が新しい refresh token を返した場合は Vault を原子的に更新する。失効・`invalid_grant` 時は接続を `reauth_required` にして再認証導線を通知する。
-
-### 15.2 同期
-
-- Google の sync token は `external_calendars.sync_cursor`、event etag は `external_events.etag` に保存する。
-- 初回接続、カレンダー画面表示、ユーザーの「今すぐ同期」、Supabase Cron の定期実行から `sync-calendar` を起動する。
-- bidirectional mode のローカル編集は `sync-calendar` へ即時 enqueue し、失敗時は再送可能な pending 状態にする。DB trigger から外部 API を直接呼ばない。
-- pull / push を idempotent にする。
-- local・remote の一方だけが変わった場合は自動適用する。
-- 両方が base から変わった場合は `sync_conflicts` へ保存する。
-- 後勝ちにせず、利用者が local / remote を選択する。
-- 解決結果と日時を保存する。
+Google Calendar 等との連携を追加するときは provider adapter を設け、認可、calendar 一覧、差分 pull、変更 push、接続解除を共通化する。匿名ユーザーの正式アカウント化、OAuth token の保管、外部予定テーブル、同期競合は、その時点のSupabase・provider公式仕様を確認した別計画で定義する。
 
 ## 16. 通知
 
 ### 16.1 アプリ内通知
 
 - `notifications` を Realtime 購読する。
-- プラン変更、投票済み予定の変更、同期競合、リマインドを通知対象とする。
+- プラン変更、投票済み予定の変更、オフライン競合、リマインドを通知対象とする。
 - `dedupe_key` で同一通知の重複を防ぐ。
 
 ### 16.2 Web Push
@@ -476,7 +440,7 @@ MVP では Google provider を実装する。Outlook / Apple 等は adapter の�
 - 暗号学的に十分なランダム token を発行し、DB には hash を保存する。
 - `public-plan` は token hash と時間窓をキーにした DB カウンタで rate limit し、超過時は `429` を返す。生 token・生 IP アドレスはカウンタに保存しない。
 - 閲覧 API は確定プラン予定だけを返す。
-- 個人予定、外部予定、OAuth 情報、非公開の参加者情報を返さない。
+- 個人予定、非公開の参加者情報を返さない。
 - link の revoke / expiry を提供する。
 - ICS は確定プランと移動・終日予定から生成する。
 
@@ -489,17 +453,16 @@ MVP では Google provider を実装する。Outlook / Apple 等は adapter の�
 - server revision が `base_revision` より進んでいれば競合として local / server の差分を返す。
 - 未解決競合があるレコードの後続 mutation は送信を停止し、Client queue 内で保留する。
 - UI で利用者が採用側を選び、解決 RPC の成功後に新しい revision を基準として後続 mutation を再評価する。
-- OAuth token、service role key、Google refresh tokenを offline cache へ保存しない。
+- service role key、LLM API key、VAPID private keyを offline cache へ保存しない。
 
 ## 19. セキュリティ
 
 - Client へ渡すのは Supabase URL と anon key のみ。
-- service role、LLM API key、Google client secret、VAPID private key は Edge Function secrets で管理する。
+- service role、LLM API key、VAPID private key は Edge Function secrets で管理する。
 - 認証必須の Edge Function は JWT を検証し、service role 使用前に membership / ownership を再検証する。`public-plan` は JWT の代わりに share token、失効・期限、rate limit を検証する。
-- OAuth state / PKCE と redirect URI allowlist を必須にする。
 - invite / share token は hash 保存し、ログへ出さない。
 - 入力長、JSON schema、URL scheme、日時範囲を検証する。
-- public share と個人・外部予定のデータ経路を分離する。
+- public share と個人予定のデータ経路を分離する。
 
 ## 20. 実装ロードマップ
 
@@ -515,11 +478,12 @@ MVP では Google provider を実装する。Outlook / Apple 等は adapter の�
 8. `feat(history)`: versions、preview、非破壊 restore
 9. `feat(ai)`: `generate-plan`、note 更新、busy interval
 10. `feat(screen3)`: calendar feed、personal events、期間 API
-11. `feat(calendar)`: provider adapter、Google identity link / OAuth、双方向同期、競合解決
-12. `feat(notifications)`: アプリ内通知、Web Push、reminder cron
-13. `feat(sharing)`: 閲覧リンク、ICS
-14. `feat(offline)`: PWA cache、IndexedDB queue、競合選択
-15. `test`: 3 画面 E2E、RLS / Realtime / 復元 / 外部同期 / オフライン統合テスト
+11. `feat(notifications)`: アプリ内通知、Web Push、reminder cron
+12. `feat(sharing)`: 閲覧リンク、ICS
+13. `feat(offline)`: PWA cache、IndexedDB queue、競合選択
+14. `test`: 3 画面 E2E、RLS / Realtime / 復元 / 通知 / オフライン統合テスト
+
+Google Calendar等の外部カレンダー連携は、MVP完了後に別の計画・PR群として着手する。
 
 ## 21. テスト計画
 
@@ -531,9 +495,8 @@ MVP では Google provider を実装する。Outlook / Apple 等は adapter の�
 | 履歴 | preview で現行不変、restore 後も旧履歴保持、votes 不変 |
 | Realtime | 2 ブラウザで messages / notes / votes / plan / notifications 反映 |
 | AI | 5 fixture、schema 遵守、失敗時 DB 不変、重複適用防止 |
-| Calendar | identity link、token 非公開、pull / push 冪等性、競合選択 |
 | Push | 許可拒否、subscription 失効、重複送信防止 |
-| Share | plan だけ返し personal / external を返さない |
+| Share | plan だけ返し personal events を返さない |
 | Offline | 閲覧、queue 再送、競合、local / server 各選択 |
 
 E2E 完了シナリオ:
@@ -546,10 +509,9 @@ E2E 完了シナリオ:
 6. 確定プランがカレンダーへ表示される。
 7. 画面 3 での変更が画面 2 と履歴へ反映される。
 8. 過去版を復元しても投票と旧履歴が維持される。
-9. Google Calendar と双方向同期し、競合時に採用側を選べる。
-10. アプリ内通知・Web Push・リマインドが重複なく届く。
-11. 閲覧リンクと ICS が個人・外部予定を漏らさない。
-12. オフライン編集を再接続後に同期し、競合を選択解決できる。
+9. アプリ内通知・Web Push・リマインドが重複なく届く。
+10. 閲覧リンクと ICS が個人予定を漏らさない。
+11. オフライン編集を再接続後に同期し、競合を選択解決できる。
 
 ## 22. 残る未決事項
 
@@ -566,19 +528,16 @@ E2E 完了シナリオ:
 
 | リスク | 対策 |
 | --- | --- |
-| MVP が Google OAuth・Push・オフラインまで含み大きい | PR を細分化し、各段階で動く縦方向の状態を維持する |
-| 外部 API 障害でデモが止まる | Seed、既存プラン維持、手動再試行、アプリ内通知をフォールバックにする |
-| 匿名ユーザーが別端末で継続できない | Google 接続時に identity link し、それ以前は同一ブラウザ利用と明示する |
+| MVP が Web Push・共有・オフラインまで含む | PR を細分化し、各段階で動く縦方向の状態を維持する |
+| LLM・Pushサービス障害でデモが止まる | Seed、既存プラン維持、手動再試行、アプリ内通知をフォールバックにする |
+| 匿名ユーザーが別端末で継続できない | 同一ブラウザ利用を明示し、正式アカウント化は将来拡張で設計する |
 | モック DTO と DB がずれる | 最初の実装 PR で Seed と生成型を共有し、fixture を同じ形にする |
 | 復元後の票が非アクティブ候補を指す | 投票を巻き戻さず、集計時に active option の票だけ数える |
 | 履歴と Realtime で多重更新が起きる | 全プラン更新を command RPC と `expected_version` に集約する |
-| Supabase manual identity linking の設定・仕様変更 | プロジェクトで明示的に有効化し、匿名データを保持したまま Google identity を追加できることを最初の Auth 統合テストで確認する |
 
 ## 24. Supabase 公式資料
 
 - [Anonymous Sign-Ins](https://supabase.com/docs/guides/auth/auth-anonymous)
-- [Identity Linking](https://supabase.com/docs/guides/auth/auth-identity-linking)
 - [Row Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security)
 - [Database Functions](https://supabase.com/docs/guides/database/functions)
-- [Vault](https://supabase.com/docs/guides/database/vault)
 - [Cron](https://supabase.com/docs/guides/cron)
