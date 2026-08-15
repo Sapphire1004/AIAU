@@ -21,7 +21,7 @@ npm install
 
 # 環境変数（Supabase の値はセットアップ担当から共有される）
 cp .env.example .env.local
-# .env.local に VITE_SUPABASE_URL と VITE_SUPABASE_ANON_KEY を記入
+# .env.local に VITE_SUPABASE_URL と VITE_SUPABASE_PUBLISHABLE_KEY を記入
 
 npm run dev
 ```
@@ -32,8 +32,15 @@ npm run dev
 | `npm run build` | 型チェック + 本番ビルド |
 | `npm run lint` | Lint（oxlint） |
 | `npm run test` | テスト実行（Vitest） |
+| `npm run verify` | Lint + Test + Build |
+| `npm run supabase:start` | ローカル Supabase 起動 |
+| `npm run db:reset` | Migration をゼロから再適用 |
+| `npm run db:test` | pgTAP DB テスト |
+| `npm run types:generate` | ローカル DB から TypeScript 型を生成 |
 
-技術選定の詳細と理由は [docs/tech-stack.md](docs/tech-stack.md) を参照。
+Hosted Supabase では Anonymous Sign-Ins を有効化する。Web Push を利用する場合は Edge Function Secrets に `VAPID_PUBLIC_KEY`、`VAPID_PRIVATE_KEY`、`VAPID_SUBJECT` を設定し、公開鍵を `VITE_VAPID_PUBLIC_KEY` に設定する。
+
+バックエンドと Supabase の構成は [docs/backend-supabase-plan.md](docs/backend-supabase-plan.md) を参照。
 
 ## 使い方
 
