@@ -16,7 +16,24 @@
 
 ## セットアップ
 
-TBD
+```bash
+npm install
+
+# 環境変数（Supabase の値はセットアップ担当から共有される）
+cp .env.example .env.local
+# .env.local に VITE_SUPABASE_URL と VITE_SUPABASE_ANON_KEY を記入
+
+npm run dev
+```
+
+| コマンド | 内容 |
+| --- | --- |
+| `npm run dev` | 開発サーバー起動 |
+| `npm run build` | 型チェック + 本番ビルド |
+| `npm run lint` | Lint（oxlint） |
+| `npm run test` | テスト実行（Vitest） |
+
+技術選定の詳細と理由は [docs/tech-stack.md](docs/tech-stack.md) を参照。
 
 ## 使い方
 
