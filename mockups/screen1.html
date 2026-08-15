@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AIAU | アイデアボード + チャット</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="index.html"><span class="brand-mark">A</span><span class="brand-name">AIAU</span></a>
+    <div class="trip-switcher"><small>旅行 / 参加中 3人</small><span class="trip-name">週末の東京アート旅</span></div>
+    <nav class="main-nav"><a class="active" href="screen1.html">アイデア</a><a href="screen2.html">プラン</a><a href="screen3.html">カレンダー</a></nav>
+    <div class="header-actions"><div class="avatar-stack"><span class="avatar">ゆ</span><span class="avatar">け</span><span class="avatar">あ</span></div><button class="icon-button" aria-label="設定">⚙</button></div>
+  </header>
+  <div class="mock-note"><span>静的モックアップ / バックエンド・AI 未接続 / 旅行データはダミーです</span></div>
+  <main class="page-shell">
+    <div class="page-title">
+      <div><span class="eyebrow">SCREEN 01 · IDEA BOARD</span><h1>アイデアを集める</h1><p>チャットから見つけた「やりたい」を、みんなで育てよう。</p></div>
+      <div class="title-actions"><button class="secondary-button" id="add-note-button">＋ 付箋を追加</button><a class="primary-button" href="screen2.html" style="text-decoration:none;">プランを確認 →</a></div>
+    </div>
+    <div class="board-chat">
+      <section class="surface-card board-panel">
+        <div class="board-toolbar">
+          <div class="section-heading"><div><h2>アイデアボード</h2><p>付箋をドラッグして並べ替えられます</p></div><span class="tag ai"><span class="dot"></span>AI 整理中</span></div>
+        </div>
+        <div class="board-canvas" id="board-canvas">
+          <div class="note-list" id="note-list"></div>
+          <div class="ai-status"><span class="ai-pulse"></span><span>AI 整理中</span><span style="color:var(--muted);">新しい発言を確認しています</span></div>
+        </div>
+      </section>
+      <section class="surface-card chat-panel">
+        <div class="chat-toolbar"><div class="section-heading"><div><h2>旅のチャット</h2><div class="chat-members"><span class="avatar-stack"><span class="avatar">ゆ</span><span class="avatar">け</span><span class="avatar">あ</span></span> 3人が参加中</div></div><button class="icon-button" aria-label="チャットメニュー">•••</button></div></div>
+        <div class="chat-messages" id="chat-messages"></div>
+        <form class="chat-composer" id="chat-form">
+          <div class="reply-preview" id="reply-preview" hidden></div>
+          <div class="mention-suggestions" id="mention-suggestions" hidden></div>
+          <div class="composer-wrap"><textarea id="chat-input" placeholder="#で付箋、@で参加者をメンション" rows="1"></textarea><button class="send-button" aria-label="送信">↑</button></div>
+        </form>
+      </section>
+    </div>
+  </main>
+  <dialog id="note-dialog"><form method="dialog" class="dialog-body" id="note-form"><div class="dialog-header"><h2 id="dialog-title">付箋を追加</h2><button class="icon-button" value="cancel" aria-label="閉じる">×</button></div><div class="form-field"><label for="note-title-input">タイトル *</label><input id="note-title-input" required maxlength="60" placeholder="例：東京タワー"></div><div class="form-field"><label for="note-memo-input">補足メモ</label><textarea id="note-memo-input" placeholder="わかっていることをメモ"></textarea></div><div class="form-field"><label for="note-attrs-input">属性（読点「、」区切り）</label><input id="note-attrs-input" placeholder="場所、所要時間、希望時間帯"></div><div class="dialog-actions"><button class="secondary-button" value="cancel">キャンセル</button><button class="primary-button" id="save-note" value="default">保存する</button></div></form></dialog>
+  <script src="common-data.js"></script><script src="screen1.js"></script>
+</body>
+</html>

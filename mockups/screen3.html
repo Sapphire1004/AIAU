@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AIAU | カレンダー</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="index.html"><span class="brand-mark">A</span><span class="brand-name">AIAU</span></a>
+    <div class="trip-switcher"><small>旅行 / 参加中 3人</small><span class="trip-name">週末の東京アート旅</span></div>
+    <nav class="main-nav"><a href="screen1.html">アイデア</a><a href="screen2.html">プラン</a><a class="active" href="screen3.html">カレンダー</a></nav>
+    <div class="header-actions"><div class="avatar-stack"><span class="avatar">ゆ</span><span class="avatar">け</span><span class="avatar">あ</span></div><button class="icon-button" aria-label="設定">⚙</button></div>
+  </header>
+  <div class="mock-note"><span>静的モックアップ / バックエンド・AI 未接続 / カレンダー連携・同期は未接続です</span></div>
+  <main class="page-shell">
+    <div class="page-title"><div><span class="eyebrow">SCREEN 03 · CALENDAR</span><h1>カレンダー</h1><p>旅の予定も、いつもの予定も、ひとつの場所で。</p></div><div class="title-actions"><a class="secondary-button" href="screen2.html" style="text-decoration:none;">← プランを見る</a><button class="primary-button">＋ 予定を追加</button></div></div>
+    <div class="calendar-grid">
+      <section class="surface-card calendar-main">
+        <div class="calendar-toolbar"><div class="calendar-date"><button>‹</button><span>2025年10月18日（土）</span><button>›</button></div><div class="view-tabs" role="tablist"><button class="view-tab active" data-view="day">日</button><button class="view-tab" data-view="week">週</button><button class="view-tab" data-view="month">月</button><button class="view-tab" data-view="agenda">アジェンダ</button></div></div>
+        <div class="legend"><span class="legend-item"><i class="legend-color coral"></i>プラン予定</span><span class="legend-item"><i class="legend-color blue"></i>個人予定</span><span class="legend-item"><i class="legend-color green"></i>外部予定</span><span class="legend-item"><i class="legend-color" style="background:var(--purple);"></i>未定</span></div>
+        <div class="calendar-view" id="view-day">
+          <div class="all-day"><div class="all-day-label">終日</div><div data-all-day-events></div></div>
+          <div class="day-view"><div class="time-axis"><span>09:00</span><span>10:00</span><span>11:00</span><span>12:00</span><span>13:00</span><span>14:00</span><span>15:00</span><span>16:00</span><span>17:00</span><span>18:00</span></div><div class="day-track" data-day-events></div></div>
+        </div>
+        <div class="calendar-view" id="view-week" hidden>
+          <div style="padding:18px;">
+            <div class="section-heading"><div><h2>10月13日〜19日の週</h2><p>週の予定を一覧できます</p></div><span class="tag">6件の予定</span></div>
+            <div class="month-view" style="padding:16px 0 0;"><div class="month-head" data-week-head></div><div class="month-cells" data-week-events></div></div>
+          </div>
+        </div>
+        <div class="calendar-view" id="view-month" hidden>
+          <div class="month-view">
+            <div class="section-heading" style="margin-bottom:12px;"><div><h2>2025年10月</h2><p>予定のある日を確認できます</p></div></div>
+            <div class="month-head" data-month-head></div>
+            <div class="month-cells" data-month-events></div>
+          </div>
+        </div>
+        <div class="calendar-view" id="view-agenda" hidden>
+          <div class="agenda-view" data-agenda-items></div>
+        </div>
+      </section>
+      <aside class="surface-card calendar-side"><div class="side-heading"><h2>予定の詳細</h2><span>選択すると表示</span></div><div id="event-detail" class="empty-detail">左の予定を選択すると、<br>メモ・場所・費用・元の付箋への<br>導線がここに表示されます。</div><div class="sync-card"><strong>カレンダーの同期</strong><p>外部カレンダーは未接続です。これは同期前の画面イメージです。</p><button class="text-button" style="margin-top:9px;">連携先を管理 →</button></div></aside>
+    </div>
+  </main>
+  <script src="common-data.js"></script><script src="screen3.js"></script>
+</body>
+</html>

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AIAU | UI モックアップ</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="index.html"><span class="brand-mark">A</span><span class="brand-name">AIAU</span></a>
+    <div class="trip-switcher"><small>UI モックアップ</small><span class="trip-name">週末の東京アート旅</span></div>
+  </header>
+  <main class="page-shell">
+    <div class="page-title">
+      <div>
+        <span class="eyebrow">PROTOTYPE / 3 SCREENS</span>
+        <h1>お出かけを、みんなで組み立てる</h1>
+        <p>チャットのアイデアを付箋に集め、プランとカレンダーへつなぐ画面モックアップです。</p>
+      </div>
+    </div>
+    <div class="mock-note"><span>これは見た目と画面遷移を確認するための静的モックアップです。バックエンド・AI は未接続で、表示データはすべてダミーです。</span></div>
+    <section class="surface-card" style="padding: 24px; margin-top: 20px;">
+      <div class="section-heading">
+        <div><span class="eyebrow">SCREENS</span><h2 style="margin-top: 5px;">3つの画面を試す</h2></div>
+        <span class="tag"><span class="dot"></span>共通の旅行データ</span>
+      </div>
+      <div class="screen-links" style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:20px;">
+        <a class="surface-card" href="screen1.html" style="padding:20px;text-decoration:none;border-color:#d8ebe8;box-shadow:none;">
+          <span class="eyebrow">SCREEN 01</span><h3 style="margin:10px 0 7px;font-size:16px;">アイデアボード + チャット</h3>
+          <p style="margin:0;color:var(--muted);font-size:12px;line-height:1.7;">会話から抽出した付箋を眺め、編集・整理する場所。</p>
+          <span class="text-button" style="display:inline-block;margin-top:18px;">画面を開く →</span>
+        </a>
+        <a class="surface-card" href="screen2.html" style="padding:20px;text-decoration:none;border-color:#e4def2;box-shadow:none;">
+          <span class="eyebrow">SCREEN 02</span><h3 style="margin:10px 0 7px;font-size:16px;">タイムラインプラン</h3>
+          <p style="margin:0;color:var(--muted);font-size:12px;line-height:1.7;">候補を時間軸に並べ、投票と履歴で決める場所。</p>
+          <span class="text-button" style="display:inline-block;margin-top:18px;">画面を開く →</span>
+        </a>
+        <a class="surface-card" href="screen3.html" style="padding:20px;text-decoration:none;border-color:#dce6f4;box-shadow:none;">
+          <span class="eyebrow">SCREEN 03</span><h3 style="margin:10px 0 7px;font-size:16px;">カレンダー</h3>
+          <p style="margin:0;color:var(--muted);font-size:12px;line-height:1.7;">確定プランと個人・外部予定をまとめて見る場所。</p>
+          <span class="text-button" style="display:inline-block;margin-top:18px;">画面を開く →</span>
+        </a>
+      </div>
+    </section>
+    <section style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
+      <div class="surface-card" style="padding:18px;">
+        <span class="eyebrow">INTERACTION</span><h3 style="margin:8px 0;font-size:14px;">確認できる操作</h3>
+        <ul style="margin:0;padding-left:18px;color:var(--muted);font-size:11px;line-height:2;"><li>付箋のドラッグ、追加・編集・削除</li><li>投票・採用案の確定、履歴パネル</li><li>カレンダーの日 / 週 / 月 / アジェンダ切替</li></ul>
+      </div>
+      <div class="surface-card" style="padding:18px;">
+        <span class="eyebrow">DATA STORY</span><h3 style="margin:8px 0;font-size:14px;">同じ旅行を表現</h3>
+        <p style="margin:0;color:var(--muted);font-size:11px;line-height:1.8;">「東京都美術館」「古書店カフェ」「谷中銀座」の付箋・予定・カレンダー予定が、共通のダミーデータでつながっています。</p>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
