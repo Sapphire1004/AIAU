@@ -158,16 +158,18 @@ describe('page repository contract', () => {
     expect(rpc).toHaveBeenNthCalledWith(2, 'revoke_trip_invite', { p_invite_id: 'invite-id' })
   })
 
-  it('subscribes to trip member changes for live participant updates', () => {
-    const subscribe = vi.fn().mockReturnValue({ topic: 'trip:trip-id:members' })
+  it('subscribes to trip member changes on a channel per subscriber', () => {
+    const subscribe = vi.fn().mockReturnValue({ topic: 'trip:trip-id:members:board' })
     const on = vi.fn().mockReturnValue({ subscribe })
     const channel = vi.fn().mockReturnValue({ on })
     getSupabaseMock.mockReturnValue({ channel })
 
     const onChange = vi.fn()
-    subscribeToTripMembers('trip-id', onChange)
+    subscribeToTripMembers('trip-id', 'board', onChange)
+    subscribeToTripMembers('trip-id', 'header', onChange)
 
-    expect(channel).toHaveBeenCalledWith('trip:trip-id:members')
+    expect(channel).toHaveBeenNthCalledWith(1, 'trip:trip-id:members:board')
+    expect(channel).toHaveBeenNthCalledWith(2, 'trip:trip-id:members:header')
     expect(on).toHaveBeenCalledWith(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'trip_members', filter: 'trip_id=eq.trip-id' },

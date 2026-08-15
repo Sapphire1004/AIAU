@@ -70,7 +70,7 @@ export function AppShell({ children, tripId }: { children: ReactNode; tripId?: s
     }
 
     void loadHeader()
-    const memberChannel = subscribeToTripMembers(headerTripId, () => void loadHeader())
+    const memberChannel = subscribeToTripMembers(headerTripId, 'header', () => void loadHeader())
 
     return () => {
       active = false
