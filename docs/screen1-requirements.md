@@ -9,6 +9,7 @@
 - ボードはキャンバス系ライブラリを使わず、**絶対配置の div + pointer events** で実装する
 - LLM 呼び出しは **Edge Function 経由**とし、API キーをクライアントに公開しない
 - 画面 2・3 は画面 1 が作る `notes` データを読む → **`notes` のスキーマがチーム間のインターフェース契約**となる
+- 認証、旅行作成・招待、RLS、共通テーブルの詳細は [バックエンド・Supabase 実装計画](backend-supabase-plan.md) に従う
 
 ## 2. 機能要件
 
@@ -55,23 +56,41 @@
 | ID | 要件 | 受入条件 |
 | --- | --- | --- |
 | S1-22 | URL 補強 | チャットに URL が含まれる場合、Edge Function が OG タイトルを取得する。Google マップ URL（短縮 URL 含む）はリダイレクト追跡で地名・座標を抽出し、付箋の属性に反映する。3 秒タイムアウト、失敗時はドメイン名のみ表示 |
-| S1-23 | 発言削除 | 自分の発言を削除できる（不適切発言への対応） |
+| S1-23 | 発言削除 | 自分の発言をソフト削除できる（不適切発言への対応）。AI 操作の根拠参照を壊さない |
 
 ## 3. データモデル（インターフェース契約）
 
 ```sql
 trips (
   id uuid primary key default gen_random_uuid(),
-  title text,
-  created_at timestamptz default now()
+  title text not null,
+  starts_at timestamptz,
+  ends_at timestamptz,
+  timezone text not null default 'Asia/Tokyo',
+  origin text,
+  budget numeric,
+  currency text not null default 'JPY',
+  created_by uuid not null,         -- auth.uid()
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
 )
 
 trip_members (
   trip_id uuid references trips not null,
   user_id uuid not null,            -- auth.uid()
   nickname text not null,           -- 旅行ごとのニックネーム
+  role text not null default 'member', -- 'owner' | 'member'
   joined_at timestamptz default now(),
   primary key (trip_id, user_id)
+)
+
+trip_invites (
+  id uuid primary key default gen_random_uuid(),
+  trip_id uuid references trips not null,
+  token_hash text unique not null,  -- 生の招待トークンは保存しない
+  expires_at timestamptz,
+  revoked_at timestamptz,
+  created_at timestamptz default now()
 )
 
 messages (
@@ -81,7 +100,8 @@ messages (
   author_name text not null,
   text text not null,
   processed boolean default false,  -- AI が読んだか
-  created_at timestamptz default now()
+  created_at timestamptz default now(),
+  deleted_at timestamptz
 )
 
 notes (
@@ -107,7 +127,8 @@ note_operations (                   -- undo 用ログ（S1-17）
   op text,                          -- 'add' | 'update' | 'hold'
   before_state jsonb, after_state jsonb,
   source_message_id uuid,
-  reverted boolean default false,
+  reverted_at timestamptz,
+  reverted_by uuid,
   created_at timestamptz default now()
 )
 ```
@@ -155,10 +176,10 @@ note_operations (                   -- undo 用ログ（S1-17）
 ## 5. 非機能・制約
 
 - LLM API キー・Supabase service role key はコミットしない。Edge Function のシークレットで管理し、クライアントには anon key のみを渡す
-- RLS: `trip_members` を基準に、旅行の参加者のみが該当旅行の `messages` / `notes` を読み書きできる
+- RLS: `trip_members` を基準に、旅行の参加者のみが該当旅行のデータを読み書きできる。複数テーブルを変更する操作は RPC に集約する
 - 発言の文字数制限（例: 500 文字）、付箋タイトルの制限（例: 60 文字）
 - Realtime トラフィック: ドラッグは broadcast のスロットル必須（S1-08）。DB 変更の購読は messages / notes の変更のみとする
-- 匿名 Auth の既知の制約: 識別はブラウザ（localStorage）単位。**別端末・別ブラウザでは別ユーザーになる**。端末間の連続性は本スコープ外とする（必要になった場合は匿名 → メール / OAuth への昇格で対応可能）
+- 匿名 Auth の既知の制約: 識別はブラウザ（localStorage）単位。**別端末・別ブラウザでは別ユーザーになる**。Google Calendar 接続時は Google identity を同じアカウントへリンクし、`auth.uid()` を維持したまま正式アカウントへ昇格する
 
 ## 6. 事前検証（実装前・UI 不要）
 
@@ -183,10 +204,9 @@ note_operations (                   -- undo 用ログ（S1-17）
 
 ## 8. 未決事項
 
-- 匿名 Auth 採用の最終確認（本書は匿名前提。正式ログインにする場合は S1-01 のみ差し替え）
-- 旅行（trip）の作成フローの担当範囲（画面 1 に含めるか、別画面か）
+- 旅行（trip）作成・招待参加の UI を画面 1 に含めるか、別画面にするか（バックエンドは共通 RPC として実装する）
 - グルーピング（S1-20）の画面 2 側での解釈方法
 - モバイル対応の範囲（本書はデスクトップ優先）
 - LLM モデルの選定（6 章のフィクスチャテスト結果で決定）
 - 旅行からの退出・メンバー削除機能の要否（MVP ではなくても成立）
-- 招待 URL の有効期限の要否（MVP では無期限で十分）
+- 招待 URL の既定有効期限（MVP では無期限を候補とし、実装前に確定する）
