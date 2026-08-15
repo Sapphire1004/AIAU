@@ -32,6 +32,10 @@ jobs:
       - run: npx supabase start
       - run: npm run db:test
       - run: npx supabase db lint --local --level warning
+      - name: Start Edge Functions
+        run: |
+          npx supabase functions serve > /tmp/aiau-functions.log 2>&1 &
+          sleep 5
       - name: Integration test
         run: |
           eval "$(npx supabase status -o env)"
