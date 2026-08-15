@@ -78,7 +78,7 @@ export async function resolveOfflineConflict(
 export function subscribeToCalendar(userId: string, onChange: () => void): RealtimeChannel {
   const channel = getSupabase().channel(`user:${userId}:calendar`)
   for (const table of ['personal_events', 'notifications', 'offline_conflicts'] as const) {
-    channel.on('postgres_changes', { event: '*', schema: 'public', table }, onChange)
+    channel.on('postgres_changes', { event: '*', schema: 'public', table, filter: `user_id=eq.${userId}` }, onChange)
   }
   return channel.subscribe()
 }

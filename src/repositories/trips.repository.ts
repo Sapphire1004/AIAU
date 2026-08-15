@@ -37,8 +37,8 @@ export async function createTrip(input: CreateTripInput): Promise<CreateTripResu
   })
   throwIfError(error)
   const result = data?.[0]
-  if (!result) {
-    throw new Error('Trip creation did not return a result')
+  if (!result?.trip_id || !result.plan_id || !result.invite_token) {
+    throw new Error('Trip creation returned invalid data')
   }
   return {
     tripId: result.trip_id,
