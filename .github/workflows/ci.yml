@@ -39,6 +39,6 @@ jobs:
       - name: Integration test
         run: |
           eval "$(npx supabase status -o env)"
-          SUPABASE_TEST_URL="$API_URL" SUPABASE_TEST_KEY="$PUBLISHABLE_KEY" npm run test:integration
+          SUPABASE_TEST_URL="$API_URL" SUPABASE_TEST_KEY="$PUBLISHABLE_KEY" SUPABASE_TEST_EXPECT_OPENAI_UNCONFIGURED=true npm run test:integration
       - if: always()
         run: npx supabase stop --no-backup

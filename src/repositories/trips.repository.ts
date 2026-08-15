@@ -1,6 +1,7 @@
+import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 import { requireData, throwIfError } from '@/lib/errors'
 import { getSupabase } from '@/lib/supabase'
-import type { CreateTripInput, CreateTripResult, Plan, Trip, TripMember } from '@/types/domain'
+import type { CreateTripInput, CreateTripResult, Plan, Trip, TripInvite, TripMember } from '@/types/domain'
 
 export async function listTrips(): Promise<Trip[]> {
   const { data, error } = await getSupabase().from('trips').select('*').order('updated_at', { ascending: false })
@@ -22,6 +23,23 @@ export async function getTripMembers(tripId: string): Promise<TripMember[]> {
     .order('joined_at')
   throwIfError(error)
   return data ?? []
+}
+
+export type TripMemberSubscriber = 'board' | 'header'
+
+export function subscribeToTripMembers(
+  tripId: string,
+  subscriber: TripMemberSubscriber,
+  onChange: (payload: RealtimePostgresChangesPayload<TripMember>) => void,
+): RealtimeChannel {
+  return getSupabase()
+    .channel(`trip:${tripId}:members:${subscriber}`)
+    .on<TripMember>(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'trip_members', filter: `trip_id=eq.${tripId}` },
+      onChange,
+    )
+    .subscribe()
 }
 
 export async function createTrip(input: CreateTripInput): Promise<CreateTripResult> {
@@ -60,6 +78,16 @@ export async function getPlanForTrip(tripId: string): Promise<Plan> {
   const { data, error } = await getSupabase().from('plans').select('*').eq('trip_id', tripId).single()
   throwIfError(error)
   return requireData(data, 'Plan was not found')
+}
+
+export async function listInvites(tripId: string): Promise<TripInvite[]> {
+  const { data, error } = await getSupabase()
+    .from('trip_invites')
+    .select('*')
+    .eq('trip_id', tripId)
+    .order('created_at', { ascending: false })
+  throwIfError(error)
+  return data ?? []
 }
 
 export async function createInvite(tripId: string, expiresAt?: string): Promise<string> {

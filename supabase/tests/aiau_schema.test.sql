@@ -1,5 +1,5 @@
 begin;
-select plan(29);
+select plan(30);
 select has_table('public', 'profiles', 'profiles exists');
 select has_table('public', 'trips', 'trips exists');
 select has_table('public', 'trip_members', 'trip_members exists');
@@ -29,5 +29,15 @@ select has_function('public', 'confirm_option', 'confirm_option exists');
 select has_function('public', 'restore_plan_version', 'restore_plan_version exists');
 select has_function('public', 'get_calendar_feed', 'get_calendar_feed exists');
 select has_function('public', 'get_public_plan', 'get_public_plan exists');
+select ok(
+  exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'trip_members'
+  ),
+  'trip_members is published to supabase_realtime'
+);
 select * from finish();
 rollback;

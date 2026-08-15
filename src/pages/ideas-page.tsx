@@ -10,6 +10,7 @@ import {
 } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ErrorState, LoadingState } from '@/components/layout/states'
+import { InvitePanel } from '@/components/trip/invite-panel'
 import { listMessages, sendMessage, subscribeToMessages } from '@/repositories/messages.repository'
 import {
   activateNote,
@@ -21,7 +22,7 @@ import {
   moveNote,
   updateNote,
 } from '@/repositories/notes.repository'
-import { getTrip, getTripMembers } from '@/repositories/trips.repository'
+import { getTrip, getTripMembers, subscribeToTripMembers } from '@/repositories/trips.repository'
 import { extractNotes } from '@/services/ai.service'
 import type { Message, Note, NoteAttributes, Trip, TripMember } from '@/types/domain'
 
@@ -58,6 +59,10 @@ export function IdeasPage({ userId }: { userId: string }) {
     () => members.find((member) => member.user_id === userId)?.nickname ?? '匿名ユーザー',
     [members, userId],
   )
+  const isOwner = useMemo(
+    () => members.some((member) => member.user_id === userId && member.role === 'owner'),
+    [members, userId],
+  )
   const membersById = useMemo(
     () => new Map(members.map((member) => [member.user_id, member.nickname])),
     [members],
@@ -91,10 +96,12 @@ export function IdeasPage({ userId }: { userId: string }) {
     void refresh()
     const messageChannel = subscribeToMessages(tripId, () => void refresh())
     const noteChannel = createNoteChannel(tripId, () => void refresh(), () => undefined)
+    const memberChannel = subscribeToTripMembers(tripId, 'board', () => void refresh())
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
       void messageChannel.unsubscribe()
       void noteChannel.unsubscribe()
+      void memberChannel.unsubscribe()
     }
   }, [refresh, tripId])
 
@@ -288,6 +295,7 @@ export function IdeasPage({ userId }: { userId: string }) {
             <p>チャットから見つけた「やりたい」を、みんなで育てよう。</p>
           </div>
           <div className="title-actions">
+            <InvitePanel canManage={isOwner} tripId={tripId} />
             <button
               className="secondary-button"
               id="add-note-button"
