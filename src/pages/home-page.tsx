@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent, type InputHTMLAttributes } from 'react'
 import { ArrowRight, Link2, Plus } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { storeInviteToken } from '@/lib/invite-token'
 import { createTrip, joinTrip, listTrips } from '@/repositories/trips.repository'
 import type { Trip } from '@/types/domain'
 
@@ -38,7 +39,7 @@ export function HomePage() {
         startsAt: form.get('startsAt') ? new Date(String(form.get('startsAt'))).toISOString() : undefined,
         endsAt: form.get('endsAt') ? new Date(String(form.get('endsAt'))).toISOString() : undefined,
       })
-      sessionStorage.setItem(`aiau:invite:${result.tripId}`, result.inviteToken)
+      storeInviteToken(result.tripId, result.inviteToken)
       navigate(`/trips/${result.tripId}/ideas`)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '旅行を作成できませんでした')
