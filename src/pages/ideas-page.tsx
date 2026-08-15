@@ -22,7 +22,7 @@ import {
   moveNote,
   updateNote,
 } from '@/repositories/notes.repository'
-import { getTrip, getTripMembers } from '@/repositories/trips.repository'
+import { getTrip, getTripMembers, subscribeToTripMembers } from '@/repositories/trips.repository'
 import { extractNotes } from '@/services/ai.service'
 import type { Message, Note, NoteAttributes, Trip, TripMember } from '@/types/domain'
 
@@ -96,10 +96,12 @@ export function IdeasPage({ userId }: { userId: string }) {
     void refresh()
     const messageChannel = subscribeToMessages(tripId, () => void refresh())
     const noteChannel = createNoteChannel(tripId, () => void refresh(), () => undefined)
+    const memberChannel = subscribeToTripMembers(tripId, () => void refresh())
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
       void messageChannel.unsubscribe()
       void noteChannel.unsubscribe()
+      void memberChannel.unsubscribe()
     }
   }, [refresh, tripId])
 
