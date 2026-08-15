@@ -7,7 +7,9 @@
 | ドキュメント | 内容 |
 | --- | --- |
 | [docs/requirements.md](docs/requirements.md) | 機能要件（3 画面の仕様） |
+| [docs/screen1-requirements.md](docs/screen1-requirements.md) | 画面 1（アイデアボード + チャット）の詳細要件 |
 | [docs/screen3-calendar.md](docs/screen3-calendar.md) | 画面 3（カレンダー）機能要件の決定記録 |
+| [docs/backend-supabase-plan.md](docs/backend-supabase-plan.md) | 3 画面共通のバックエンド・Supabase 実装計画 |
 | [BRANCHING.md](BRANCHING.md) | ブランチ戦略・命名規則・コミット規約 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 開発の進め方・PR の出し方 |
 | [.github/pull_request_template.md](.github/pull_request_template.md) | PR テンプレート |
