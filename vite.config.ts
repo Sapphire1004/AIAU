@@ -2,10 +2,37 @@ import path from 'node:path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    VitePWA({
+      // 本番ビルドのみ有効（devOptions 既定値 = dev では SW を登録しない）
+      // autoUpdate: 新しいデプロイを検知したら SW を自動更新し、古いキャッシュに固定されるのを防ぐ
+      registerType: 'autoUpdate',
+      manifest: {
+        name: 'AIAU',
+        short_name: 'AIAU',
+        description:
+          'チャットの内容を AI が整理し、旅行プランからカレンダーまで組み立てるプランニングアプリ',
+        lang: 'ja',
+        display: 'standalone',
+        theme_color: '#ffffff',
+        background_color: '#ffffff',
+        icons: [
+          {
+            src: '/favicon.svg',
+            sizes: 'any',
+            type: 'image/svg+xml',
+            purpose: 'any',
+          },
+        ],
+      },
+    }),
+  ],
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, './src'),
