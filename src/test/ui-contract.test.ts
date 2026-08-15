@@ -12,6 +12,7 @@ import {
   listInvites,
   listTrips,
   revokeInvite,
+  subscribeToTripMembers,
 } from '@/repositories/trips.repository'
 
 const { getSupabaseMock } = vi.hoisted(() => ({
@@ -155,6 +156,24 @@ describe('page repository contract', () => {
       p_expires_at: '2026-08-20T00:00:00.000Z',
     })
     expect(rpc).toHaveBeenNthCalledWith(2, 'revoke_trip_invite', { p_invite_id: 'invite-id' })
+  })
+
+  it('subscribes to trip member changes for live participant updates', () => {
+    const subscribe = vi.fn().mockReturnValue({ topic: 'trip:trip-id:members' })
+    const on = vi.fn().mockReturnValue({ subscribe })
+    const channel = vi.fn().mockReturnValue({ on })
+    getSupabaseMock.mockReturnValue({ channel })
+
+    const onChange = vi.fn()
+    subscribeToTripMembers('trip-id', onChange)
+
+    expect(channel).toHaveBeenCalledWith('trip:trip-id:members')
+    expect(on).toHaveBeenCalledWith(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'trip_members', filter: 'trip_id=eq.trip-id' },
+      onChange,
+    )
+    expect(subscribe).toHaveBeenCalled()
   })
 
   it('normalizes calendar RPC rows for the page model', async () => {

@@ -3,7 +3,7 @@ import { Bell } from 'lucide-react'
 import { Link, NavLink, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import '@/mockups.css'
-import { getTrip, getTripMembers } from '@/repositories/trips.repository'
+import { getTrip, getTripMembers, subscribeToTripMembers } from '@/repositories/trips.repository'
 import { enablePushNotifications } from '@/services/push.service'
 
 type HeaderTrip = {
@@ -43,29 +43,38 @@ export function AppShell({ children, tripId }: { children: ReactNode; tripId?: s
       }
     }
 
+    const headerTripId = activeTripId
     setHeaderLoading(true)
     setHeaderLoadFailed(false)
-    void Promise.all([getTrip(activeTripId), getTripMembers(activeTripId)])
-      .then(([trip, members]) => {
-        if (!active) return
-        setHeaderTrip({
-          id: activeTripId,
-          title: trip.title,
-          memberNames: members.map((member) => member.nickname),
+
+    function loadHeader() {
+      return Promise.all([getTrip(headerTripId), getTripMembers(headerTripId)])
+        .then(([trip, members]) => {
+          if (!active) return
+          setHeaderTrip({
+            id: headerTripId,
+            title: trip.title,
+            memberNames: members.map((member) => member.nickname),
+          })
+          setHeaderLoadFailed(false)
         })
-      })
-      .catch(() => {
-        if (active) {
-          setHeaderTrip(null)
-          setHeaderLoadFailed(true)
-        }
-      })
-      .finally(() => {
-        if (active) setHeaderLoading(false)
-      })
+        .catch(() => {
+          if (active) {
+            setHeaderTrip(null)
+            setHeaderLoadFailed(true)
+          }
+        })
+        .finally(() => {
+          if (active) setHeaderLoading(false)
+        })
+    }
+
+    void loadHeader()
+    const memberChannel = subscribeToTripMembers(headerTripId, () => void loadHeader())
 
     return () => {
       active = false
+      void memberChannel.unsubscribe()
     }
   }, [activeTripId])
 

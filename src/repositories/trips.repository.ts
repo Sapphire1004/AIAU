@@ -1,3 +1,4 @@
+import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 import { requireData, throwIfError } from '@/lib/errors'
 import { getSupabase } from '@/lib/supabase'
 import type { CreateTripInput, CreateTripResult, Plan, Trip, TripInvite, TripMember } from '@/types/domain'
@@ -22,6 +23,20 @@ export async function getTripMembers(tripId: string): Promise<TripMember[]> {
     .order('joined_at')
   throwIfError(error)
   return data ?? []
+}
+
+export function subscribeToTripMembers(
+  tripId: string,
+  onChange: (payload: RealtimePostgresChangesPayload<TripMember>) => void,
+): RealtimeChannel {
+  return getSupabase()
+    .channel(`trip:${tripId}:members`)
+    .on<TripMember>(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'trip_members', filter: `trip_id=eq.${tripId}` },
+      onChange,
+    )
+    .subscribe()
 }
 
 export async function createTrip(input: CreateTripInput): Promise<CreateTripResult> {
