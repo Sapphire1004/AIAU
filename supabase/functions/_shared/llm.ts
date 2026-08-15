@@ -4,40 +4,83 @@ export async function sha256(value: string): Promise<string> {
   return Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
-export async function callJsonModel(system: string, input: unknown): Promise<unknown | null> {
-  const url = Deno.env.get('LLM_API_URL')
-  const key = Deno.env.get('LLM_API_KEY')
-  const model = Deno.env.get('LLM_MODEL')
-  if (!url || !key || !model) {
-    return null
+const openAIEndpoint = 'https://api.openai.com/v1/chat/completions'
+const defaultOpenAIModel = 'gpt-4o-mini'
+const openAITimeoutMs = 45_000
+const openAIMaxCompletionTokens = 4_096
+
+export type OpenAIErrorCode =
+  | 'OPENAI_API_KEY_NOT_CONFIGURED'
+  | 'OPENAI_AUTHENTICATION_FAILED'
+  | 'OPENAI_FORBIDDEN'
+  | 'OPENAI_RATE_LIMITED'
+  | 'OPENAI_REQUEST_TIMEOUT'
+  | 'OPENAI_REQUEST_FAILED'
+  | 'OPENAI_RESPONSE_INVALID'
+
+export class OpenAIError extends Error {
+  constructor(
+    readonly code: OpenAIErrorCode,
+    readonly status: number,
+  ) {
+    super(code)
+    this.name = 'OpenAIError'
+  }
+}
+
+export async function callOpenAIJson(system: string, input: unknown): Promise<unknown> {
+  const key = Deno.env.get('OPENAI_API_KEY')?.trim()
+  if (!key) throw new OpenAIError('OPENAI_API_KEY_NOT_CONFIGURED', 503)
+  const model = Deno.env.get('OPENAI_MODEL')?.trim() || defaultOpenAIModel
+
+  let response: Response
+  try {
+    response = await fetch(openAIEndpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: JSON.stringify(input) },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0,
+        max_completion_tokens: openAIMaxCompletionTokens,
+        n: 1,
+        store: false,
+      }),
+      signal: AbortSignal.timeout(openAITimeoutMs),
+    })
+  } catch (error) {
+    if (error instanceof DOMException && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+      throw new OpenAIError('OPENAI_REQUEST_TIMEOUT', 504)
+    }
+    throw new OpenAIError('OPENAI_REQUEST_FAILED', 502)
   }
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: JSON.stringify(input) },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0,
-    }),
-    signal: AbortSignal.timeout(45_000),
-  })
+  if (response.status === 401) throw new OpenAIError('OPENAI_AUTHENTICATION_FAILED', 502)
+  if (response.status === 403) throw new OpenAIError('OPENAI_FORBIDDEN', 502)
+  if (response.status === 429) throw new OpenAIError('OPENAI_RATE_LIMITED', 429)
+  if (!response.ok) throw new OpenAIError('OPENAI_REQUEST_FAILED', 502)
 
-  if (!response.ok) {
-    throw new Error(`LLM_REQUEST_FAILED:${response.status}`)
+  let result: { choices?: Array<{ finish_reason?: string; message?: { content?: string | null } }> }
+  try {
+    result = await response.json()
+  } catch {
+    throw new OpenAIError('OPENAI_RESPONSE_INVALID', 502)
   }
-
-  const result = await response.json()
-  const content = result?.choices?.[0]?.message?.content
-  if (typeof content !== 'string') {
-    throw new Error('LLM_RESPONSE_INVALID')
+  const choice = result.choices?.[0]
+  const content = choice?.message?.content
+  if (choice?.finish_reason !== 'stop' || typeof content !== 'string' || !content.trim()) {
+    throw new OpenAIError('OPENAI_RESPONSE_INVALID', 502)
   }
-  return JSON.parse(content)
+  try {
+    return JSON.parse(content) as unknown
+  } catch {
+    throw new OpenAIError('OPENAI_RESPONSE_INVALID', 502)
+  }
 }

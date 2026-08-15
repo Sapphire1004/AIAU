@@ -5,8 +5,166 @@ import type { Database } from '@/types/database'
 const url = process.env.SUPABASE_TEST_URL
 const key = process.env.SUPABASE_TEST_KEY
 const integration = url && key ? describe : describe.skip
+const openAIUnconfiguredIntegration =
+  url && key && process.env.SUPABASE_TEST_EXPECT_OPENAI_UNCONFIGURED === 'true' ? it : it.skip
+const openAIConfiguredIntegration =
+  url && key && process.env.SUPABASE_TEST_EXPECT_OPENAI_CONFIGURED === 'true' ? it : it.skip
+
+async function expectFunctionError(error: unknown, code: string, status: number) {
+  expect(error).not.toBeNull()
+  const response = (error as { context?: unknown }).context
+  if (!(response instanceof Response)) throw new Error('Expected an Edge Function HTTP response')
+  expect(response.status).toBe(status)
+  expect(await response.clone().json()).toEqual({ error: code })
+}
 
 integration('Supabase integration', () => {
+  openAIUnconfiguredIntegration('returns explicit errors without creating AI output when OpenAI is not configured', async () => {
+    const client = createClient<Database>(url!, key!)
+    const auth = await client.auth.signInAnonymously()
+    expect(auth.error).toBeNull()
+    const user = auth.data.user!
+
+    const tripResult = await client.rpc('create_trip', {
+      p_title: 'OpenAI未設定テスト',
+      p_nickname: 'owner',
+      p_starts_at: '2026-08-16T00:00:00Z',
+      p_ends_at: '2026-08-17T00:00:00Z',
+      p_timezone: 'Asia/Tokyo',
+    })
+    expect(tripResult.error).toBeNull()
+    const trip = tripResult.data![0]
+
+    const messageResult = await client.from('messages').insert({
+      trip_id: trip.trip_id,
+      author_id: user.id,
+      author_name: 'owner',
+      text: '浅草へ行きたい',
+    })
+    expect(messageResult.error).toBeNull()
+
+    const extractResult = await client.functions.invoke('extract-notes', {
+      body: { trip_id: trip.trip_id, idempotency_key: crypto.randomUUID() },
+    })
+    await expectFunctionError(extractResult.error, 'OPENAI_API_KEY_NOT_CONFIGURED', 503)
+
+    const generateResult = await client.functions.invoke('generate-plan', {
+      body: {
+        trip_id: trip.trip_id,
+        plan_id: trip.plan_id,
+        expected_version: 0,
+        regenerate: false,
+        idempotency_key: crypto.randomUUID(),
+      },
+    })
+    await expectFunctionError(generateResult.error, 'OPENAI_API_KEY_NOT_CONFIGURED', 503)
+
+    const [notesResult, slotsResult] = await Promise.all([
+      client.from('notes').select('id').eq('trip_id', trip.trip_id),
+      client.from('plan_slots').select('id').eq('plan_id', trip.plan_id),
+    ])
+    expect(notesResult.data).toEqual([])
+    expect(slotsResult.data).toEqual([])
+  }, 30_000)
+
+  openAIConfiguredIntegration('creates AI notes and a plan through the real OpenAI API', async () => {
+    const client = createClient<Database>(url!, key!)
+    const auth = await client.auth.signInAnonymously()
+    expect(auth.error).toBeNull()
+    const user = auth.data.user!
+
+    const tripResult = await client.rpc('create_trip', {
+      p_title: 'OpenAI実APIテスト',
+      p_nickname: 'owner',
+      p_starts_at: '2026-08-16T00:00:00Z',
+      p_ends_at: '2026-08-17T00:00:00Z',
+      p_timezone: 'Asia/Tokyo',
+      p_origin: '東京駅',
+      p_budget: 10_000,
+      p_currency: 'JPY',
+    })
+    expect(tripResult.error).toBeNull()
+    const trip = tripResult.data![0]
+
+    const messageResult = await client
+      .from('messages')
+      .insert({
+        trip_id: trip.trip_id,
+        author_id: user.id,
+        author_name: 'owner',
+        text: '浅草の雷門を午前10時に見たい。滞在時間は60分、費用は1000円くらい。',
+      })
+      .select('id')
+      .single()
+    expect(messageResult.error).toBeNull()
+
+    const extractResult = await client.functions.invoke('extract-notes', {
+      body: { trip_id: trip.trip_id, idempotency_key: crypto.randomUUID() },
+    })
+    expect(extractResult.error).toBeNull()
+
+    const notesResult = await client
+      .from('notes')
+      .select('id,title,origin,status,source_message_id,attrs')
+      .eq('trip_id', trip.trip_id)
+      .is('deleted_at', null)
+    expect(notesResult.error).toBeNull()
+    const notes = notesResult.data ?? []
+    expect(notes.length).toBeGreaterThan(0)
+    expect(notes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          origin: 'ai',
+          status: 'active',
+          source_message_id: messageResult.data!.id,
+          attrs: expect.objectContaining({ cost: 1000, duration: 60, time_hint: expect.any(String) }),
+        }),
+      ]),
+    )
+    expect(notes.every((note) => note.title.trim().length > 0)).toBe(true)
+
+    const generateResult = await client.functions.invoke('generate-plan', {
+      body: {
+        trip_id: trip.trip_id,
+        plan_id: trip.plan_id,
+        expected_version: 0,
+        regenerate: false,
+        idempotency_key: crypto.randomUUID(),
+      },
+    })
+    expect(generateResult.error).toBeNull()
+
+    const slotsResult = await client
+      .from('plan_slots')
+      .select('id,start_at,end_at,plan_options!plan_options_slot_id_fkey(id,title,start_at,end_at,kind,note_id)')
+      .eq('plan_id', trip.plan_id)
+      .is('deleted_at', null)
+    expect(slotsResult.error).toBeNull()
+    const slots = slotsResult.data ?? []
+    const options = slots.flatMap((slot) => slot.plan_options ?? [])
+    const activityOptions = options.filter((option) => option.kind === 'activity')
+    const noteIds = new Set(notes.map((note) => note.id))
+    expect(slots.length).toBeGreaterThan(0)
+    expect(options.length).toBeGreaterThan(0)
+    expect(activityOptions).toHaveLength(notes.length)
+    expect(activityOptions.every((option) => Boolean(option.note_id && noteIds.has(option.note_id)))).toBe(true)
+    for (const slot of slots) {
+      expect(Date.parse(slot.start_at)).not.toBeNaN()
+      expect(Date.parse(slot.end_at)).toBeGreaterThan(Date.parse(slot.start_at))
+    }
+
+    const runsResult = await client
+      .from('ai_runs')
+      .select('kind,status,error_code')
+      .eq('trip_id', trip.trip_id)
+      .order('created_at')
+    expect(runsResult.error).toBeNull()
+    expect(runsResult.data).toEqual([
+      expect.objectContaining({ kind: 'extract_notes', status: 'completed', error_code: null }),
+      expect.objectContaining({ kind: 'generate_plan', status: 'completed', error_code: null }),
+    ])
+  }, 120_000)
+
   it('runs the collaborative trip flow with RLS, voting, history, and calendar data', async () => {
     const ownerClient = createClient<Database>(url!, key!)
     const memberClient = createClient<Database>(url!, key!)
@@ -57,28 +215,50 @@ integration('Supabase integration', () => {
       .single()
     expect(messageResult.error).toBeNull()
 
-    const extractResult = await ownerClient.functions.invoke('extract-notes', {
-      body: { trip_id: trip.trip_id, idempotency_key: crypto.randomUUID() },
-    })
-    expect(extractResult.error).toBeNull()
-
     const noteResult = await ownerClient
       .from('notes')
-      .select('*')
-      .eq('trip_id', trip.trip_id)
+      .insert({
+        trip_id: trip.trip_id,
+        title: '美術館',
+        memo: null,
+        attrs: { time_hint: '午前' },
+        origin: 'user',
+        user_touched: true,
+        author_id: owner.id,
+      })
+      .select()
       .single()
     expect(noteResult.error).toBeNull()
 
-    const generateResult = await ownerClient.functions.invoke('generate-plan', {
-      body: {
-        trip_id: trip.trip_id,
-        plan_id: trip.plan_id,
-        expected_version: 0,
-        regenerate: false,
-        idempotency_key: crypto.randomUUID(),
+    const planResult = await ownerClient.rpc('apply_plan_command', {
+      p_plan_id: trip.plan_id,
+      p_expected_version: 0,
+      p_command: {
+        type: 'replace_plan',
+        summary: '統合テスト用プラン',
+        payload: {
+          regenerate: false,
+          slots: [
+            {
+              start_at: '2026-08-16T01:00:00Z',
+              end_at: '2026-08-16T02:00:00Z',
+              options: [
+                {
+                  note_id: noteResult.data!.id,
+                  title: '美術館',
+                  start_at: '2026-08-16T01:00:00Z',
+                  end_at: '2026-08-16T02:00:00Z',
+                  kind: 'activity',
+                  attrs: { time_hint: '午前' },
+                  reason: '統合テスト',
+                },
+              ],
+            },
+          ],
+        },
       },
     })
-    expect(generateResult.error).toBeNull()
+    expect(planResult.error).toBeNull()
 
     const slotResult = await ownerClient
       .from('plan_slots')
@@ -116,7 +296,12 @@ integration('Supabase integration', () => {
       p_timezone: 'Asia/Tokyo',
     })
     expect(feedResult.error).toBeNull()
-    expect(feedResult.data?.map((event) => event.source).sort()).toEqual(['personal', 'plan'])
+    expect(feedResult.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source: 'plan', plan_id: trip.plan_id }),
+        expect.objectContaining({ source: 'personal', title: '個人予定' }),
+      ]),
+    )
 
     const updateResult = await ownerClient.rpc('apply_plan_command', {
       p_plan_id: trip.plan_id,

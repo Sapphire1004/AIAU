@@ -1,7 +1,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { z } from 'npm:zod@4.4.3'
 import { corsHeaders, errorResponse, jsonResponse } from '../_shared/http.ts'
-import { callJsonModel, sha256 } from '../_shared/llm.ts'
+import { callOpenAIJson, OpenAIError, sha256 } from '../_shared/llm.ts'
 import { noteOperations } from '../_shared/schemas.ts'
 import { createServiceClient, requireUser } from '../_shared/supabase.ts'
 
@@ -9,73 +9,6 @@ const requestSchema = z.object({
   trip_id: z.string().uuid(),
   idempotency_key: z.string().min(1).max(200),
 })
-
-type ExistingNote = {
-  id: string
-  title: string
-  attrs: Record<string, unknown>
-  status: 'active' | 'held'
-  user_touched: boolean
-}
-
-type NewMessage = { id: string; author_name: string; text: string }
-
-function extractAttributes(text: string): Record<string, unknown> {
-  const attrs: Record<string, unknown> = {}
-  const cost = text.match(/([0-9][0-9,]*)\s*円/)
-  const minutes = text.match(/([0-9]+)\s*分/)
-  const hours = text.match(/([0-9]+(?:\.[0-9]+)?)\s*時間/)
-  const timeHint = text.match(/午前|午後|朝|昼|夕方|夜/)
-  if (cost) attrs.cost = Number(cost[1].replaceAll(',', ''))
-  if (minutes) attrs.duration = Number(minutes[1])
-  if (hours) attrs.duration = Math.round(Number(hours[1]) * 60)
-  if (timeHint) attrs.time_hint = timeHint[0]
-  return attrs
-}
-
-function fallbackOperations(existingNotes: ExistingNote[], messages: NewMessage[]) {
-  const operations: Array<Record<string, unknown>> = []
-  for (const message of messages) {
-    const existing = existingNotes.find((note) => message.text.includes(note.title))
-    const isWithdrawal = /なし|やめ|行かない|行けない|微妙|撤回/.test(message.text)
-    if (existing) {
-      if (existing.user_touched) continue
-      if (isWithdrawal) {
-        operations.push({
-          op: 'hold',
-          target: existing.id,
-          reason: message.text.slice(0, 500),
-          source: message.id,
-        })
-      } else {
-        operations.push({
-          op: 'update',
-          target: existing.id,
-          attrs: extractAttributes(message.text),
-          source: message.id,
-        })
-      }
-      continue
-    }
-    if (isWithdrawal) continue
-
-    const title = message.text
-      .replace(/https?:\/\/\S+/g, '')
-      .replace(/行ってみたい|行きたい|食べたい|気になる|したい/g, '')
-      .replace(/[。！？!?]/g, ' ')
-      .trim()
-      .slice(0, 60)
-    if (title.length < 2) continue
-    operations.push({
-      op: 'add',
-      title,
-      memo: '',
-      attrs: extractAttributes(message.text),
-      source: message.id,
-    })
-  }
-  return { operations }
-}
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
@@ -162,16 +95,27 @@ Deno.serve(async (request) => {
         text: message.text,
       })),
     }
-    const system =
-      'Extract travel ideas as JSON {operations:[...]}. Allowed operations are add, update, hold. Every operation needs a source message UUID. Never return delete. Never update or hold user_touched notes.'
-    const modelResult = await callJsonModel(system, input)
-    const parsed = noteOperations.parse(
-      modelResult ??
-        fallbackOperations(
-          input.existing_notes as ExistingNote[],
-          messagesResult.data as NewMessage[],
-        ),
-    )
+    const system = [
+      'Return exactly one JSON object with an operations array and no other text.',
+      'Use only these exact operation shapes:',
+      'add: {"op":"add","title":"string","memo":"string","attrs":{},"source":"message UUID"}. Use an empty string for memo when there is no memo; do not use null.',
+      'update: {"op":"update","target":"existing note UUID","title":"string if changed","memo":"string or null if changed","attrs":{},"source":"message UUID"}.',
+      'hold: {"op":"hold","target":"existing note UUID","reason":"string","source":"message UUID"}.',
+      'The attrs object may contain only address, lat, lng, duration, time_hint, and cost.',
+      'Preserve an exact requested clock time or time of day in attrs.time_hint. Store duration as minutes and cost as a number when stated.',
+      'The source value must be an id from new_messages. The target value must be an id from existing_notes.',
+      'Add only concrete travel places or activities. Return an empty operations array for casual conversation.',
+      'Never use keys named operation or source_message_uuid. Never return delete.',
+      'Never update or hold a note whose user_touched value is true.',
+    ].join(' ')
+    let parsed: z.infer<typeof noteOperations>
+    try {
+      parsed = noteOperations.parse(await callOpenAIJson(system, input))
+    } catch (error) {
+      if (error instanceof OpenAIError) throw error
+      if (error instanceof z.ZodError) throw new OpenAIError('OPENAI_RESPONSE_INVALID', 502)
+      throw error
+    }
 
     const applied = await client.rpc('apply_note_operations', {
       p_trip_id: body.trip_id,
@@ -188,11 +132,11 @@ Deno.serve(async (request) => {
         .update({
           status: 'failed',
           finished_at: new Date().toISOString(),
-          error_code: 'EXTRACT_NOTES_FAILED',
+          error_code: error instanceof OpenAIError ? error.code : 'EXTRACT_NOTES_FAILED',
           error_message: error instanceof Error ? error.message.slice(0, 1000) : 'Unknown error',
         })
         .eq('id', runId)
     }
-    return errorResponse(error)
+    return errorResponse(error, error instanceof OpenAIError ? error.status : 400)
   }
 })

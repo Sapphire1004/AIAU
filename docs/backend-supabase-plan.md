@@ -64,7 +64,7 @@ flowchart LR
   Client --> RT[Realtime / Broadcast]
   Client --> RPC[SQL RPC]
   Client --> EF[Edge Functions]
-  EF --> LLM[LLM API]
+  EF --> OpenAI[OpenAI API]
   EF --> Push[Web Push Service]
   EF --> DB
 ```
@@ -75,7 +75,7 @@ flowchart LR
 | --- | --- |
 | 単一テーブルの単純 CRUD | Supabase Client + RLS |
 | 複数テーブルをまとめて更新する処理 | SQL RPC |
-| LLM、Web Push、ics 生成 | Edge Functions |
+| OpenAI、Web Push、ics 生成 | Edge Functions |
 | 共同編集の確定結果 | Postgres Changes |
 | ドラッグ中の一時座標 | Realtime Broadcast |
 
@@ -268,6 +268,13 @@ public share は確定プラン予定のみ返し、個人予定を含めない�
 - `VERSION_CONFLICT`
 - `INVALID_OPTION`
 - `OFFLINE_CONFLICT`
+- `OPENAI_API_KEY_NOT_CONFIGURED`
+- `OPENAI_AUTHENTICATION_FAILED`
+- `OPENAI_FORBIDDEN`
+- `OPENAI_RATE_LIMITED`
+- `OPENAI_REQUEST_TIMEOUT`
+- `OPENAI_REQUEST_FAILED`
+- `OPENAI_RESPONSE_INVALID`
 
 再送可能な RPC / Edge Function は idempotency key を受け付ける。
 
@@ -275,7 +282,7 @@ public share は確定プラン予定のみ返し、個人予定を含めない�
 
 | Function | 役割 |
 | --- | --- |
-| `extract-notes` | 未処理発言を claim し、LLM operation を検証して適用 |
+| `extract-notes` | 未処理発言を claim し、OpenAI operation を検証して適用 |
 | `generate-plan` | 付箋・旅行条件・個人予定の busy 時間から slots / options を生成 |
 | `dispatch-push` | VAPID 秘密鍵で Web Push 送信 |
 | `export-ics` | 確定プランを `text/calendar` で返す |
@@ -289,11 +296,17 @@ public share は確定プラン予定のみ返し、個人予定を含めない�
 - error code
 - timeout / retry
 - idempotency
-- 外部 API 失敗時のフォールバック
+- 外部API未設定・認証失敗・rate limit・timeout・不正応答のエラーコードと非更新保証
 
-具体的な timeout は各 Function の実装PRで Supabase と呼び出し先サービスの上限を確認して固定する。値が未定の間は暗黙の自動 retry を行わない。retry は idempotency を保証できる読み取り・通知処理に限定して指数 backoff を使い、LLM の結果適用は同じ idempotency key による明示再送だけを許可する。
+具体的な timeout は各 Function の実装PRで Supabase と呼び出し先サービスの上限を確認して固定する。値が未定の間は暗黙の自動 retry を行わない。retry は idempotency を保証できる読み取り・通知処理に限定して指数 backoff を使い、OpenAI の結果適用は同じ idempotency key による明示再送だけを許可する。
 
 ## 11. AI 契約
+
+- Provider: OpenAI Chat Completions API
+- Model: `OPENAI_MODEL`（既定値`gpt-4o-mini`）
+- Secret: `OPENAI_API_KEY`をEdge Function Secretsだけに保存する
+- OpenAI未設定・認証失敗・rate limit・timeout・不正応答時はAI操作を生成せず、runをfailedにして明示的なエラーコードを返す
+- 規則ベース・fixture・固定値によるAI出力の代替は本番コードに置かない
 
 ### 11.1 付箋抽出
 
@@ -336,7 +349,7 @@ public share は確定プラン予定のみ返し、個人予定を含めない�
 - 人手編集済み option を上書きしない。
 - AI 失敗時も既存プラン・手動編集を維持する。
 
-実装前に以下の fixture を各 3 回実行する。
+以下の代表入力をOpenAI実APIで各3回実行する。
 
 1. 新規場所
 2. 既存付箋への追加情報
@@ -453,12 +466,12 @@ Google Calendar 等との連携を追加するときは provider adapter を設�
 - server revision が `base_revision` より進んでいれば競合として local / server の差分を返す。
 - 未解決競合があるレコードの後続 mutation は送信を停止し、Client queue 内で保留する。
 - UI で利用者が採用側を選び、解決 RPC の成功後に新しい revision を基準として後続 mutation を再評価する。
-- service role key、LLM API key、VAPID private keyを offline cache へ保存しない。
+- service role key、OpenAI API key、VAPID private keyを offline cache へ保存しない。
 
 ## 19. セキュリティ
 
 - Client へ渡すのは Supabase URL と anon key のみ。
-- service role、LLM API key、VAPID private key は Edge Function secrets で管理する。
+- service role、OpenAI API key、VAPID private key は Edge Function secrets で管理する。
 - 認証必須の Edge Function は JWT を検証し、service role 使用前に membership / ownership を再検証する。`public-plan` は JWT の代わりに share token、失効・期限、rate limit を検証する。
 - invite / share token は hash 保存し、ログへ出さない。
 - 入力長、JSON schema、URL scheme、日時範囲を検証する。
@@ -473,7 +486,7 @@ Google Calendar 等との連携を追加するときは provider adapter を設�
 3. `feat(db)`: core schema、Migration、Seed、生成型
 4. `feat(auth)`: 匿名 Auth、profiles、旅行作成・招待参加、RLS
 5. `feat(screen1)`: messages / notes / note_operations、Realtime / Broadcast
-6. `feat(ai)`: `extract-notes`、fixture、undo
+6. `feat(ai)`: `extract-notes`、OpenAI実API契約テスト、undo
 7. `feat(screen2)`: plans / slots / options / votes、plan command RPC
 8. `feat(history)`: versions、preview、非破壊 restore
 9. `feat(ai)`: `generate-plan`、note 更新、busy interval
@@ -494,7 +507,7 @@ Google Calendar等の外部カレンダー連携は、MVP完了後に別の計�
 | RPC | `expected_version`、vote unique、slot / option 整合性、1 command = 1 version |
 | 履歴 | preview で現行不変、restore 後も旧履歴保持、votes 不変 |
 | Realtime | 2 ブラウザで messages / notes / votes / plan / notifications 反映 |
-| AI | 5 fixture、schema 遵守、失敗時 DB 不変、重複適用防止 |
+| AI | OpenAI実APIの5代表入力、schema遵守、失敗時DB不変、重複適用防止 |
 | Push | 許可拒否、subscription 失効、重複送信防止 |
 | Share | plan だけ返し personal events を返さない |
 | Offline | 閲覧、queue 再送、競合、local / server 各選択 |
@@ -517,7 +530,6 @@ E2E 完了シナリオ:
 
 以下は実装PRまでに決めるが、計画PRのマージを妨げない。
 
-- LLM provider / model
 - 同時接続数、応答時間、履歴保持期間等の非機能目標
 - 招待 URL・閲覧リンクの既定有効期限
 - モバイルでの画面 1 編集範囲
@@ -529,7 +541,7 @@ E2E 完了シナリオ:
 | リスク | 対策 |
 | --- | --- |
 | MVP が Web Push・共有・オフラインまで含む | PR を細分化し、各段階で動く縦方向の状態を維持する |
-| LLM・Pushサービス障害でデモが止まる | Seed、既存プラン維持、手動再試行、アプリ内通知をフォールバックにする |
+| OpenAI・Pushサービス障害でデモが止まる | 既存データを変更せずエラーを表示し、手動操作と明示的な再試行を継続できるようにする |
 | 匿名ユーザーが別端末で継続できない | 同一ブラウザ利用を明示し、正式アカウント化は将来拡張で設計する |
 | モック DTO と DB がずれる | 最初の実装 PR で Seed と生成型を共有し、fixture を同じ形にする |
 | 復元後の票が非アクティブ候補を指す | 投票を巻き戻さず、集計時に active option の票だけ数える |
