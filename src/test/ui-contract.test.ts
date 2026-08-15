@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { matchPath, MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '@/components/layout/app-shell'
+import { buildInviteUrl, readInviteTokenFromSearch } from '@/lib/invite-link'
 import { HomePage } from '@/pages/home-page'
 import { getCalendarFeed } from '@/repositories/calendar.repository'
 import { extractNotes } from '@/services/ai.service'
@@ -70,6 +71,22 @@ describe('UI route contract', () => {
     expect(markup).toContain('読み込み中')
     expect(markup).not.toContain('まだ旅行がありません。')
     expect(getSupabaseMock).not.toHaveBeenCalled()
+  })
+
+  it('prefills the join token from an invite link', () => {
+    const markup = renderAt(`/?invite=${encodeURIComponent('invite token/1')}`, createElement(HomePage))
+
+    expect(markup).toContain('value="invite token/1"')
+    expect(markup).toContain('招待リンクからトークンを読み込みました。')
+    expect(markup.match(/<form/g)).toHaveLength(2)
+  })
+
+  it('builds invite links that the home page can read back', () => {
+    const url = buildInviteUrl('invite token/1', 'https://aiau.example')
+
+    expect(url).toBe('https://aiau.example/?invite=invite%20token%2F1')
+    expect(readInviteTokenFromSearch(new URL(url).search)).toBe('invite token/1')
+    expect(readInviteTokenFromSearch('')).toBeNull()
   })
 })
 

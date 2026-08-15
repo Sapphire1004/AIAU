@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { buildInviteUrl } from '@/lib/invite-link'
 import { forgetInviteToken, readInviteToken, storeInviteToken } from '@/lib/invite-token'
 import { createInvite, listInvites, revokeInvite } from '@/repositories/trips.repository'
 import type { TripInvite } from '@/types/domain'
@@ -10,7 +11,7 @@ export function InvitePanel({ tripId, canManage }: { tripId: string; canManage: 
   const [tokenInviteId, setTokenInviteId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState<'link' | 'token' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
@@ -32,7 +33,7 @@ export function InvitePanel({ tripId, canManage }: { tripId: string; canManage: 
   }, [tripId])
 
   function open() {
-    setCopied(false)
+    setCopied(null)
     void refresh()
     const dialog = dialogRef.current
     if (dialog && !dialog.open) dialog.showModal()
@@ -42,7 +43,7 @@ export function InvitePanel({ tripId, canManage }: { tripId: string; canManage: 
     event.preventDefault()
     const expiresAtInput = String(new FormData(event.currentTarget).get('expiresAt') ?? '')
     setBusy(true)
-    setCopied(false)
+    setCopied(null)
     setError(null)
     try {
       const expiresAt = expiresAtInput ? new Date(expiresAtInput).toISOString() : undefined
@@ -59,15 +60,15 @@ export function InvitePanel({ tripId, canManage }: { tripId: string; canManage: 
     }
   }
 
-  async function handleCopy() {
+  async function handleCopy(kind: 'link' | 'token') {
     if (!token) return
     try {
-      await navigator.clipboard.writeText(token)
-      setCopied(true)
+      await navigator.clipboard.writeText(kind === 'link' ? buildInviteUrl(token) : token)
+      setCopied(kind)
       setError(null)
     } catch {
-      setCopied(false)
-      setError('自動コピーできませんでした。トークンを選択して手動でコピーしてください')
+      setCopied(null)
+      setError('自動コピーできませんでした。表示中の値を選択して手動でコピーしてください')
     }
   }
 
@@ -111,7 +112,7 @@ export function InvitePanel({ tripId, canManage }: { tripId: string; canManage: 
           </div>
 
           <p className="invite-help">
-            招待トークンはホーム画面の「旅行に参加する」に入力してもらいます。トークンは発行直後のみ表示できます。
+            招待リンクを共有すると、開いた人のホーム画面で招待トークンが入力済みになります。トークンは発行直後のみ表示できます。
           </p>
 
           {error && (
@@ -122,14 +123,24 @@ export function InvitePanel({ tripId, canManage }: { tripId: string; canManage: 
 
           {token ? (
             <div className="invite-token">
-              <span className="invite-token-label">現在のトークン</span>
+              <span className="invite-token-label">招待リンク</span>
+              <code id="invite-link">{buildInviteUrl(token)}</code>
+              <span className="invite-token-label invite-token-label-sub">招待トークン</span>
               <code>{token}</code>
               <div className="invite-token-actions">
-                <button className="secondary-button" onClick={() => void handleCopy()} type="button">
-                  コピー
+                <button
+                  className="primary-button"
+                  id="copy-invite-link"
+                  onClick={() => void handleCopy('link')}
+                  type="button"
+                >
+                  リンクをコピー
+                </button>
+                <button className="secondary-button" onClick={() => void handleCopy('token')} type="button">
+                  トークンをコピー
                 </button>
                 <span aria-live="polite" className="invite-copied" role="status">
-                  {copied ? 'コピーしました' : ''}
+                  {copied === 'link' ? 'リンクをコピーしました' : copied === 'token' ? 'トークンをコピーしました' : ''}
                 </span>
               </div>
             </div>
@@ -216,8 +227,9 @@ const INVITE_PANEL_STYLES = String.raw`
 .invite-dialog .invite-error { margin: 0 0 12px; padding: 9px 11px; color: #8a4036; border: 1px solid #f0c7bf; border-radius: 8px; background: #fff4f1; font-size: 11px; }
 .invite-dialog .invite-token { padding: 12px; border: 1px solid #cee8e3; border-radius: 10px; background: #f2faf8; }
 .invite-dialog .invite-token-label { display: block; margin-bottom: 6px; color: #718096; font-size: 10px; font-weight: 700; }
+.invite-dialog .invite-token-label-sub { margin-top: 10px; }
 .invite-dialog .invite-token code { display: block; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.6; }
-.invite-dialog .invite-token-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.invite-dialog .invite-token-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; }
 .invite-dialog .invite-copied { color: #217c72; font-size: 10px; }
 .invite-dialog .invite-empty { margin: 0; color: #718096; font-size: 11px; line-height: 1.7; }
 .invite-dialog .invite-form { display: flex; align-items: flex-end; gap: 8px; margin-top: 16px; }

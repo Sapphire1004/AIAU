@@ -587,6 +587,16 @@ dialog::backdrop { background: rgba(36,52,71,.36); }
 .home-field input:focus-visible { outline: 2px solid var(--teal-dark); outline-offset: 1px; }
 .home-date-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .home-submit { width: 100%; min-height: 44px; }
+.home-invite-note {
+  margin: 0 0 13px;
+  padding: 9px 11px;
+  color: #217c72;
+  border: 1px solid #cee8e3;
+  border-radius: 8px;
+  background: #f2faf8;
+  font-size: 11px;
+  line-height: 1.7;
+}
 .home-feedback {
   margin: 16px 0 0;
   padding: 10px 13px;
