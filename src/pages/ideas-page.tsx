@@ -826,12 +826,6 @@ const IDEAS_PAGE_STYLES = String.raw`
 .ideas-page .avatar-stack { display: flex; }
 .ideas-page .avatar { width: 28px; height: 28px; margin-left: -5px; display: grid; place-items: center; border: 2px solid var(--surface); border-radius: 50%; color: #fff; background: var(--avatar-strong, #668db9); font-size: 11px; font-weight: 700; }
 .ideas-page .avatar:first-child { margin-left: 0; }
-.ideas-page .avatar-tone-0 { --avatar-strong: #668db9; --avatar-soft: #e8eef5; --avatar-ink: #58718c; }
-.ideas-page .avatar-tone-1 { --avatar-strong: #e5a36f; --avatar-soft: #f6e9d9; --avatar-ink: #765b38; }
-.ideas-page .avatar-tone-2 { --avatar-strong: #8d77b3; --avatar-soft: #eee7f7; --avatar-ink: #725b9a; }
-.ideas-page .avatar-tone-3 { --avatar-strong: #6fa88a; --avatar-soft: #e4f1ea; --avatar-ink: #47705d; }
-.ideas-page .avatar-tone-4 { --avatar-strong: #c9788f; --avatar-soft: #f8e6ec; --avatar-ink: #8d4d61; }
-.ideas-page .avatar-tone-5 { --avatar-strong: #5f9aa8; --avatar-soft: #e3f0f3; --avatar-ink: #416c76; }
 .ideas-page .chat-messages { flex: 1; min-height: 0; overflow: auto; padding: 19px 18px; background: #fbfcfd; scroll-padding-block: 20px; }
 .ideas-page .chat-day { margin: 2px 0 16px; color: var(--muted); font-size: 10px; text-align: center; }
 .ideas-page .message { display: flex; gap: 9px; margin-bottom: 17px; scroll-margin-block: 20px; }

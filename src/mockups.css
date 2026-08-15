@@ -55,11 +55,16 @@ button { cursor: pointer; }
 .avatar-stack { display: flex; }
 .avatar {
   width: 28px; height: 28px; margin-left: -5px; display: grid; place-items: center;
-  border: 2px solid var(--surface); border-radius: 50%; color: #fff; background: #e5a36f;
+  border: 2px solid var(--surface); border-radius: 50%; color: #fff; background: var(--avatar-strong, #668db9);
   font-size: 11px; font-weight: 700;
 }
-.avatar:first-child { margin-left: 0; background: #668db9; }
-.avatar:last-child { background: #8d77b3; }
+.avatar:first-child { margin-left: 0; }
+.avatar-tone-0 { --avatar-strong: #668db9; --avatar-soft: #e8eef5; --avatar-ink: #58718c; }
+.avatar-tone-1 { --avatar-strong: #e5a36f; --avatar-soft: #f6e9d9; --avatar-ink: #765b38; }
+.avatar-tone-2 { --avatar-strong: #8d77b3; --avatar-soft: #eee7f7; --avatar-ink: #725b9a; }
+.avatar-tone-3 { --avatar-strong: #6fa88a; --avatar-soft: #e4f1ea; --avatar-ink: #47705d; }
+.avatar-tone-4 { --avatar-strong: #c9788f; --avatar-soft: #f8e6ec; --avatar-ink: #8d4d61; }
+.avatar-tone-5 { --avatar-strong: #5f9aa8; --avatar-soft: #e3f0f3; --avatar-ink: #416c76; }
 .icon-button, .secondary-button, .primary-button, .text-button {
   border: 0; border-radius: 8px; background: transparent; color: var(--ink);
 }
@@ -150,9 +155,7 @@ button { cursor: pointer; }
 .chat-day { margin: 2px 0 16px; color: var(--mock-muted); font-size: 10px; text-align: center; }
 .message { display: flex; gap: 9px; margin-bottom: 17px; scroll-margin-top: 20px; }
 .message.mine { flex-direction: row-reverse; }
-.message-avatar { flex: 0 0 30px; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: #e8eef5; color: #58718c; font-size: 11px; font-weight: 700; }
-.message:nth-of-type(2n) .message-avatar { color: #8b6d45; background: #f6e9d9; }
-.message:nth-of-type(3n) .message-avatar { color: #725b9a; background: #eee7f7; }
+.message-avatar { flex: 0 0 30px; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: var(--avatar-soft, #e8eef5); color: var(--avatar-ink, #58718c); font-size: 11px; font-weight: 700; }
 .message-content { max-width: 83%; }
 .message-meta { display: flex; align-items: baseline; gap: 7px; margin-bottom: 4px; color: var(--mock-muted); font-size: 10px; }
 .mine .message-meta { justify-content: flex-end; }

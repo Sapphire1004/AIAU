@@ -3,13 +3,19 @@ import { Bell } from 'lucide-react'
 import { Link, NavLink, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import '@/mockups.css'
+import { avatarToneClass } from '@/lib/avatar-tone'
 import { getTrip, getTripMembers, subscribeToTripMembers } from '@/repositories/trips.repository'
 import { enablePushNotifications } from '@/services/push.service'
+
+type HeaderMember = {
+  userId: string
+  nickname: string
+}
 
 type HeaderTrip = {
   id: string
   title: string
-  memberNames: string[]
+  members: HeaderMember[]
 }
 
 export function AppShell({ children, tripId }: { children: ReactNode; tripId?: string }) {
@@ -27,7 +33,7 @@ export function AppShell({ children, tripId }: { children: ReactNode; tripId?: s
       ]
     : [{ to: '/', label: '旅行一覧' }]
   const currentHeaderTrip = headerTrip?.id === activeTripId ? headerTrip : null
-  const memberNames = currentHeaderTrip?.memberNames ?? []
+  const members = currentHeaderTrip?.members ?? []
   const tripName = activeTripId
     ? currentHeaderTrip?.title ?? (headerLoading ? '読み込み中…' : '旅行')
     : '旅行を選択・作成'
@@ -49,12 +55,12 @@ export function AppShell({ children, tripId }: { children: ReactNode; tripId?: s
 
     function loadHeader() {
       return Promise.all([getTrip(headerTripId), getTripMembers(headerTripId)])
-        .then(([trip, members]) => {
+        .then(([trip, tripMembers]) => {
           if (!active) return
           setHeaderTrip({
             id: headerTripId,
             title: trip.title,
-            memberNames: members.map((member) => member.nickname),
+            members: tripMembers.map((member) => ({ userId: member.user_id, nickname: member.nickname })),
           })
           setHeaderLoadFailed(false)
         })
@@ -104,7 +110,7 @@ export function AppShell({ children, tripId }: { children: ReactNode; tripId?: s
                 ? '旅行を読み込み中'
                 : headerLoadFailed
                   ? '旅行情報を取得できません'
-                  : `旅行 / 参加中 ${memberNames.length}人`
+                  : `旅行 / 参加中 ${members.length}人`
               : '共同旅行プランナー'}
           </small>
           <span className="trip-name app-trip-name">{tripName}</span>
@@ -117,11 +123,11 @@ export function AppShell({ children, tripId }: { children: ReactNode; tripId?: s
           ))}
         </nav>
         <div className="header-actions">
-          {memberNames.length > 0 && (
-            <div aria-label={`参加者 ${memberNames.length}人`} className="avatar-stack" role="group">
-              {memberNames.slice(0, 3).map((name, index) => (
-                <span className="avatar" key={`${name}-${index}`} title={name}>
-                  {Array.from(name.trim())[0] ?? '旅'}
+          {members.length > 0 && (
+            <div aria-label={`参加者 ${members.length}人`} className="avatar-stack" role="group">
+              {members.slice(0, 3).map((member) => (
+                <span className={`avatar ${avatarToneClass(member.userId)}`} key={member.userId} title={member.nickname}>
+                  {Array.from(member.nickname.trim())[0] ?? '旅'}
                 </span>
               ))}
             </div>
