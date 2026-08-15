@@ -98,8 +98,21 @@ flowchart LR
 
 - Web Push購読の登録・失効
 - 通知権限が拒否された場合の再設定案内
+- `dispatch-push`による通知レコードの直接配信
 - 共有トークンによる公開プラン取得
-- リマインダー通知の重複防止
+- 通知レコードの重複防止
+
+#### Web Push直接確認
+
+Hosted Supabaseと実Edgeブラウザを使い、購読登録、`dispatch-push`の`sent=1`、Service Workerでの通知タイトル・本文受信を直接確認しています。期限リマインダーを自動実行するschedulerは未設定です。
+
+購読登録:
+
+![Web Push購読登録](docs/screenshots/web-push-subscription.png)
+
+通知受信:
+
+![Web Push通知受信](docs/screenshots/web-push-delivery.png)
 
 ## アーキテクチャ
 
@@ -153,7 +166,7 @@ React側では、ページから直接fixtureを読み込まず、`repositories`
 | `generate-plan` | 付箋、旅行期間、個人予定を考慮してタイムラインを生成 |
 | `export-ics` | 確定済みプランをICSとして出力 |
 | `public-plan` | 共有トークンを検証し、公開可能なプランだけを返す |
-| `dispatch-push` | 期限到来通知をWeb Pushで配信 |
+| `dispatch-push` | `notification_id`を受け取り、対象ユーザーの購読へWeb Pushを送信 |
 
 `OPENAI_API_KEY`が未設定・無効、またはOpenAI APIが失敗した場合、`extract-notes`と`generate-plan`はAI結果を生成・適用せず、runをfailedにして画面へ明示的なエラーを返します。既存の付箋とプランは変更しません。
 
@@ -401,6 +414,7 @@ SUPABASE_TEST_URL="$API_URL" SUPABASE_TEST_KEY="$PUBLISHABLE_KEY" npm run test:i
 - 匿名アカウントの端末間同期・復旧は未対応
 - 外部カレンダーとの双方向同期は未対応。現在はICS exportを提供
 - Web Pushにはブラウザ権限とVAPID設定が必要
+- `dispatch-push`の直接配信は確認済みだが、期限リマインダーを自動実行するschedulerは未設定
 - OpenAI APIが未設定または失敗した場合、AI付箋・プランは生成せず画面へエラーを表示
 - `mockups/` は設計資料であり、Reactアプリのデータソースではない
 - `seed.sql` はfixtureを投入せず、空のDBから開始する
