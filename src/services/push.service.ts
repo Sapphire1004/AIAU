@@ -17,8 +17,11 @@ export async function enablePushNotifications(): Promise<PushSubscription> {
   }
 
   const permission = await Notification.requestPermission()
+  if (permission === 'denied') {
+    throw new Error('ブラウザのサイト設定で、このサイトの通知を「許可」に変更してください')
+  }
   if (permission !== 'granted') {
-    throw new Error('Push notification permission was not granted')
+    throw new Error('通知の許可が完了しませんでした。もう一度ベルボタンを押してください')
   }
 
   const registration = await navigator.serviceWorker.ready
