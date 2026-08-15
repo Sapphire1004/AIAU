@@ -21,7 +21,9 @@ export async function markNotificationRead(notificationId: string): Promise<void
 }
 
 export async function savePushSubscription(subscription: PushSubscription): Promise<void> {
-  const user = (await getSupabase().auth.getUser()).data.user
+  const { data: userData, error: userError } = await getSupabase().auth.getUser()
+  throwIfError(userError)
+  const user = userData.user
   if (!user) {
     throw new Error('Authentication is required')
   }
