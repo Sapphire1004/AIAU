@@ -96,7 +96,7 @@ export function IdeasPage({ userId }: { userId: string }) {
     void refresh()
     const messageChannel = subscribeToMessages(tripId, () => void refresh())
     const noteChannel = createNoteChannel(tripId, () => void refresh(), () => undefined)
-    const memberChannel = subscribeToTripMembers(tripId, () => void refresh())
+    const memberChannel = subscribeToTripMembers(tripId, 'board', () => void refresh())
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
       void messageChannel.unsubscribe()

@@ -25,12 +25,15 @@ export async function getTripMembers(tripId: string): Promise<TripMember[]> {
   return data ?? []
 }
 
+export type TripMemberSubscriber = 'board' | 'header'
+
 export function subscribeToTripMembers(
   tripId: string,
+  subscriber: TripMemberSubscriber,
   onChange: (payload: RealtimePostgresChangesPayload<TripMember>) => void,
 ): RealtimeChannel {
   return getSupabase()
-    .channel(`trip:${tripId}:members`)
+    .channel(`trip:${tripId}:members:${subscriber}`)
     .on<TripMember>(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'trip_members', filter: `trip_id=eq.${tripId}` },
