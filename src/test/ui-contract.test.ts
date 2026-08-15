@@ -37,10 +37,17 @@ describe('UI route contract', () => {
     )
     const hrefs = readAttribute(markup, 'href')
 
-    expect(hrefs).toEqual(['/', `/trips/${tripId}/ideas`, `/trips/${tripId}/plan`, '/calendar'])
+    expect(hrefs).toEqual([
+      '/',
+      `/trips/${tripId}/ideas`,
+      `/trips/${tripId}/plan`,
+      `/calendar?tripId=${tripId}`,
+    ])
     expect(matchPath({ path: '/trips/:tripId/ideas', end: true }, hrefs[1])?.params.tripId).toBe(tripId)
     expect(matchPath({ path: '/trips/:tripId/plan', end: true }, hrefs[2])?.params.tripId).toBe(tripId)
-    expect(matchPath({ path: '/calendar', end: true }, hrefs[3])).not.toBeNull()
+    expect(matchPath({ path: '/calendar', end: true }, hrefs[3].split('?')[0])).not.toBeNull()
+    expect(markup).toContain('class="app-header"')
+    expect(markup).toContain('class="main-nav"')
   })
 
   it('renders repository-shaped home forms without embedding trip records', () => {
@@ -48,6 +55,8 @@ describe('UI route contract', () => {
 
     expect(readAttribute(markup, 'name')).toEqual(['title', 'nickname', 'startsAt', 'endsAt', 'token', 'nickname'])
     expect(markup.match(/<form/g)).toHaveLength(2)
+    expect(markup).toContain('class="home-page page-shell"')
+    expect(markup).toContain('お出かけを、みんなで組み立てる')
     expect(markup).toContain('role="status"')
     expect(markup).toContain('読み込み中')
     expect(markup).not.toContain('まだ旅行がありません。')

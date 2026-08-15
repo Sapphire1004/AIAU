@@ -1,8 +1,6 @@
 import { useEffect, useState, type FormEvent, type InputHTMLAttributes } from 'react'
 import { ArrowRight, Link2, Plus } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { Button } from '@/components/ui/button'
-import { ErrorState, LoadingState } from '@/components/layout/states'
 import { createTrip, joinTrip, listTrips } from '@/repositories/trips.repository'
 import type { Trip } from '@/types/domain'
 
@@ -65,85 +63,104 @@ export function HomePage() {
   }
 
   return (
-    <div className="space-y-8">
-      <section>
-        <p className="text-sm font-medium text-muted-foreground">共同旅行プランナー</p>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight">行きたいを、みんなの予定へ。</h1>
-        <p className="mt-3 max-w-2xl text-muted-foreground">
-          チャットから付箋を整理し、投票できる時間軸とカレンダーへつなげます。
-        </p>
-      </section>
-
-      {error && <ErrorState message={error} />}
-
-      <div className="grid gap-5 lg:grid-cols-2">
-        <form className="space-y-4 rounded-xl border bg-card p-5" onSubmit={handleCreate}>
-          <div className="flex items-center gap-2">
-            <Plus aria-hidden="true" className="size-5" />
-            <h2 className="text-lg font-semibold">旅行を作る</h2>
-          </div>
-          <Field label="旅行名" name="title" placeholder="週末の東京アート旅" required />
-          <Field label="あなたのニックネーム" name="nickname" placeholder="あい" required />
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="開始" name="startsAt" type="datetime-local" />
-            <Field label="終了" name="endsAt" type="datetime-local" />
-          </div>
-          <Button className="min-h-11 w-full" disabled={busy} type="submit">
-            旅行を作成
-          </Button>
-        </form>
-
-        <form className="space-y-4 rounded-xl border bg-card p-5" onSubmit={handleJoin}>
-          <div className="flex items-center gap-2">
-            <Link2 aria-hidden="true" className="size-5" />
-            <h2 className="text-lg font-semibold">招待から参加</h2>
-          </div>
-          <Field label="招待トークン" name="token" placeholder="共有されたトークン" required />
-          <Field label="あなたのニックネーム" name="nickname" placeholder="ゆき" required />
-          <Button className="min-h-11 w-full" disabled={busy} type="submit" variant="secondary">
-            参加する
-          </Button>
-        </form>
+    <div className="home-page page-shell">
+      <div className="page-title">
+        <div>
+          <span className="eyebrow">AIAU · COLLABORATIVE TRIP PLANNER</span>
+          <h1>お出かけを、みんなで組み立てる</h1>
+          <p>チャットのアイデアを付箋に集め、プランとカレンダーへつなぎます。</p>
+        </div>
       </div>
 
-      <section>
-        <h2 className="text-lg font-semibold">参加中の旅行</h2>
+      <div className="home-intro-note mock-note">
+        <span>旅行を新しく作るか、共有された招待トークンで参加してください。表示内容はSupabaseの実データです。</span>
+      </div>
+
+      {error && <p className="home-feedback" role="alert">{error}</p>}
+
+      <section aria-labelledby="home-actions-heading" className="home-action-card surface-card">
+        <div className="home-section-heading section-heading">
+          <div>
+            <span className="eyebrow">GET STARTED</span>
+            <h2 id="home-actions-heading">旅行を始める</h2>
+            <p>新しい旅行を作成するか、参加中の旅行へ合流します。</p>
+          </div>
+          <span className="tag"><span aria-hidden="true" className="dot" />匿名で利用できます</span>
+        </div>
+
+        <div className="home-actions-grid">
+          <form className="home-form-card surface-card" onSubmit={handleCreate}>
+            <div className="home-form-heading">
+              <span className="tag"><Plus aria-hidden="true" />新しい旅行</span>
+              <h3>旅行を作る</h3>
+              <p>旅行名とニックネームを決めると、アイデアボードが開きます。</p>
+            </div>
+            <Field label="旅行名" name="title" placeholder="週末の東京アート旅" required />
+            <Field id="home-create-nickname" label="あなたのニックネーム" name="nickname" placeholder="あい" required />
+            <div className="home-date-grid">
+              <Field label="開始" name="startsAt" type="datetime-local" />
+              <Field label="終了" name="endsAt" type="datetime-local" />
+            </div>
+            <button className="home-submit primary-button" disabled={busy} type="submit">
+              {busy ? '処理中…' : '旅行を作成'}
+            </button>
+          </form>
+
+          <form className="home-form-card surface-card" onSubmit={handleJoin}>
+            <div className="home-form-heading">
+              <span className="tag manual"><Link2 aria-hidden="true" />招待から参加</span>
+              <h3>旅行に参加する</h3>
+              <p>メンバーから共有された招待トークンと、表示する名前を入力します。</p>
+            </div>
+            <Field label="招待トークン" name="token" placeholder="共有されたトークン" required />
+            <Field id="home-join-nickname" label="あなたのニックネーム" name="nickname" placeholder="ゆき" required />
+            <button className="home-submit secondary-button" disabled={busy} type="submit">
+              {busy ? '処理中…' : '参加する'}
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <section aria-labelledby="joined-trips-heading" className="home-trips-card surface-card">
+        <div className="home-section-heading section-heading">
+          <div>
+            <span className="eyebrow">YOUR TRIPS</span>
+            <h2 id="joined-trips-heading">参加中の旅行</h2>
+          </div>
+          {!loading && <span className="tag"><span aria-hidden="true" className="dot" />{trips.length}件</span>}
+        </div>
         {loading ? (
-          <LoadingState />
+          <p className="home-feedback" role="status">旅行を読み込み中…</p>
         ) : trips.length ? (
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {trips.map((trip) => (
+          <div className="home-trip-list">
+            {trips.map((trip, index) => (
               <button
-                className="flex min-h-24 items-center justify-between rounded-xl border bg-card p-4 text-left hover:border-primary/50"
+                className="home-trip-card surface-card"
                 key={trip.id}
                 onClick={() => navigate(`/trips/${trip.id}/ideas`)}
                 type="button"
               >
-                <span>
-                  <strong className="block">{trip.title}</strong>
-                  <span className="mt-1 block text-sm text-muted-foreground">{trip.timezone}</span>
-                </span>
-                <ArrowRight aria-hidden="true" className="size-5" />
+                <span className="eyebrow">TRIP {String(index + 1).padStart(2, '0')}</span>
+                <h3>{trip.title}</h3>
+                <p>{trip.timezone}</p>
+                <span className="text-button">アイデアボードを開く <ArrowRight aria-hidden="true" /></span>
               </button>
             ))}
           </div>
         ) : (
-          <p className="mt-4 rounded-lg border border-dashed p-6 text-sm text-muted-foreground">まだ旅行がありません。</p>
+          <p className="home-empty">まだ参加中の旅行はありません。上のフォームから旅行を作成または参加できます。</p>
         )}
       </section>
     </div>
   )
 }
 
-function Field({ label, name, ...props }: { label: string; name: string } & InputHTMLAttributes<HTMLInputElement>) {
+function Field({ label, name, id, ...props }: { label: string; name: string } & InputHTMLAttributes<HTMLInputElement>) {
+  const fieldId = id ?? `home-${name}`
   return (
-    <label className="block text-sm font-medium">
-      <span>{label}</span>
-      <input
-        className="mt-1 min-h-11 w-full rounded-md border bg-background px-3 outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        name={name}
-        {...props}
-      />
-    </label>
+    <div className="form-field home-field">
+      <label htmlFor={fieldId}>{label}</label>
+      <input id={fieldId} name={name} {...props} />
+    </div>
   )
 }

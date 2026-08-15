@@ -1,21 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import {
-  ArrowLeft,
-  Bot,
-  CalendarDays,
-  Check,
-  CheckCircle2,
-  Clock3,
-  ExternalLink,
-  Eye,
-  History,
-  LoaderCircle,
-  RotateCcw,
-  Sparkles,
-  Trophy,
-  Vote as VoteIcon,
-  X,
-} from 'lucide-react'
+import { Check, Eye, History, LoaderCircle, RotateCcw, Sparkles, X } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import { ErrorState, LoadingState } from '@/components/layout/states'
 import { Button } from '@/components/ui/button'
@@ -50,6 +34,7 @@ export function PlanPage({ userId }: { userId: string }) {
   const [historyOpen, setHistoryOpen] = useState(false)
   const [previewVersionNumber, setPreviewVersionNumber] = useState<number | null>(null)
   const [restoreTargetVersion, setRestoreTargetVersion] = useState<number | null>(null)
+  const [activeDateKey, setActiveDateKey] = useState<string | null>(null)
   const historyPanelRef = useRef<HTMLElement | null>(null)
 
   const refreshPlan = useCallback(async (id: string, fromRealtime = false) => {
@@ -75,6 +60,7 @@ export function PlanPage({ userId }: { userId: string }) {
     setVersions([])
     setPreviewVersionNumber(null)
     setRestoreTargetVersion(null)
+    setActiveDateKey(null)
     setError(null)
     setNotice(null)
 
@@ -147,6 +133,24 @@ export function PlanPage({ userId }: { userId: string }) {
     }
     return grouped
   }, [displayOptions])
+
+  useEffect(() => {
+    if (slotGroups.length === 0) {
+      if (activeDateKey !== null) setActiveDateKey(null)
+      return
+    }
+    if (!activeDateKey || !slotGroups.some((group) => group.key === activeDateKey)) {
+      setActiveDateKey(slotGroups[0].key)
+    }
+  }, [activeDateKey, slotGroups])
+
+  const resolvedDateIndex = slotGroups.findIndex((group) => group.key === activeDateKey)
+  const activeDateIndex = resolvedDateIndex >= 0 ? resolvedDateIndex : 0
+  const activeSlotGroup = slotGroups[activeDateIndex]
+  const activeOptions = activeSlotGroup
+    ? activeSlotGroup.slots.flatMap((slot) => optionsBySlot.get(slot.id) ?? EMPTY_OPTIONS)
+    : EMPTY_OPTIONS
+  const timelineScale = createTimelineScale(activeSlotGroup?.slots ?? EMPTY_SLOTS, activeOptions, timeZone)
   const isRegeneration = Boolean(planState && (planState.plan.current_version > 0 || planState.slots.length > 0))
 
   async function performAction(
@@ -219,9 +223,9 @@ export function PlanPage({ userId }: { userId: string }) {
     return (
       <div className="space-y-4">
         <ErrorState message={error ?? '旅行またはプランが見つかりません'} />
-        <Button className="min-h-11" onClick={() => void loadInitial()} type="button" variant="outline">
+        <button className="min-h-11 rounded-lg border bg-background px-4 text-sm font-medium" onClick={() => void loadInitial()} type="button">
           もう一度読み込む
-        </Button>
+        </button>
       </div>
     )
   }
@@ -230,217 +234,232 @@ export function PlanPage({ userId }: { userId: string }) {
   const displayedAt = selectedPreviewVersion?.created_at ?? planState.plan.updated_at
 
   return (
-    <div className="space-y-5">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div className="page-shell plan-page">
+      <div className="page-title">
         <div>
-          <p className="text-sm text-muted-foreground">
+          <span className="eyebrow">SCREEN 02 · TIMELINE PLAN</span>
+          <h1>タイムラインプラン</h1>
+          <p>候補を並べて、みんなの投票で旅の流れを決めよう。</p>
+          <span className="trip-context">
             {trip.title} ・ {formatTripPeriod(trip, timeZone)}
-          </p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight">タイムラインプラン</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            時間帯ごとの候補を比較し、投票で旅の流れを決めます。
-          </p>
+          </span>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Link
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border bg-background px-4 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            to={`/trips/${tripId}/ideas`}
-          >
-            <ArrowLeft aria-hidden="true" className="size-4" />
-            付箋を見る
+        <div className="title-actions">
+          <Link className="secondary-button" to={`/trips/${tripId}/ideas`}>
+            ← 付箋を見る
           </Link>
-          <Button
-            className="min-h-11 px-4"
-            disabled={Boolean(actionKey) || isPreviewing}
-            onClick={() => void handleGenerate()}
-            title={isPreviewing ? '履歴プレビューを終了してから実行してください' : undefined}
-            type="button"
-          >
-            {actionKey === 'generate' ? (
-              <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-            ) : (
-              <Sparkles aria-hidden="true" className="size-4" />
-            )}
-            {actionKey === 'generate' ? 'AIが構成中' : isRegeneration ? 'AIで再生成' : 'AIで生成'}
-          </Button>
+          <Link className="primary-button" to={`/calendar?tripId=${encodeURIComponent(tripId)}`}>
+            カレンダーへ →
+          </Link>
         </div>
-      </header>
+      </div>
 
-      {error && <ErrorState message={error} />}
+      {error && (
+        <div className="plan-feedback">
+          <ErrorState message={error} />
+        </div>
+      )}
 
       {(refreshing || notice) && (
-        <div
-          aria-live="polite"
-          className="flex min-h-11 items-center gap-2 rounded-lg border bg-card px-4 text-sm text-muted-foreground"
-          role="status"
-        >
+        <div aria-live="polite" className="plan-status" role="status">
           {refreshing ? (
-            <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+            <LoaderCircle aria-hidden="true" className="status-icon animate-spin" />
           ) : (
-            <Check aria-hidden="true" className="size-4" />
+            <Check aria-hidden="true" className="status-icon" />
           )}
-          {refreshing ? '最新のプランを同期中' : notice}
+          <span>{refreshing ? '最新のプランを同期中' : notice}</span>
         </div>
       )}
 
       {isPreviewing && selectedPreviewVersion && (
-        <section className="flex flex-col gap-3 rounded-xl border border-primary/40 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between" aria-live="polite">
+        <section aria-live="polite" className="preview-banner">
           <div>
-            <p className="font-semibold">履歴バージョン {selectedPreviewVersion.version} をプレビュー中</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              現在のプランは変更されていません。投票は履歴に含まれないため表示していません。
-            </p>
+            <strong>履歴バージョン {selectedPreviewVersion.version} をプレビュー中</strong>
+            <p>現在のプランは変更されていません。投票は履歴に含まれないため表示していません。</p>
           </div>
-          <Button className="min-h-11" onClick={() => setPreviewVersionNumber(null)} type="button" variant="outline">
+          <button className="secondary-button" onClick={() => setPreviewVersionNumber(null)} type="button">
             現在のプランに戻る
-          </Button>
+          </button>
         </section>
       )}
 
-      <div className={`grid items-start gap-4 ${historyOpen ? 'xl:grid-cols-[minmax(0,1fr)_23rem]' : ''}`}>
-        <section aria-labelledby="timeline-heading" className="min-w-0 overflow-hidden rounded-xl border bg-card">
-          <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap items-center gap-3">
-              <h2 className="font-semibold" id="timeline-heading">
-                旅程タイムライン
-              </h2>
-              <span className="inline-flex items-center gap-1.5 rounded-full border bg-background px-3 py-1 text-xs font-medium">
-                <History aria-hidden="true" className="size-3.5" />
+      <div className="timeline-layout">
+        <section aria-labelledby="timeline-heading" className="surface-card timeline-card">
+          <div className="plan-toolbar">
+            <div className="toolbar-left">
+              <div className="date-switch">
+                <button
+                  aria-label="前の日を見る"
+                  disabled={activeDateIndex <= 0 || slotGroups.length === 0}
+                  onClick={() => setActiveDateKey(slotGroups[activeDateIndex - 1]?.key ?? null)}
+                  type="button"
+                >
+                  ‹
+                </button>
+                <span id="timeline-heading">{activeSlotGroup?.label ?? '日程未設定'}</span>
+                <button
+                  aria-label="次の日を見る"
+                  disabled={activeDateIndex >= slotGroups.length - 1 || slotGroups.length === 0}
+                  onClick={() => setActiveDateKey(slotGroups[activeDateIndex + 1]?.key ?? null)}
+                  type="button"
+                >
+                  ›
+                </button>
+              </div>
+              <span className="tag">
+                <span className="dot" />
                 {isPreviewing ? '履歴' : '現在'} v{displayedVersion}
               </span>
-              {refreshing && <span className="text-xs text-muted-foreground">再取得中</span>}
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <span className="text-xs text-muted-foreground">
+            <div className="toolbar-right">
+              <span className="last-updated">
                 {isPreviewing ? '保存日時' : '最終更新'}{' '}
                 <time dateTime={displayedAt}>{formatDateTime(displayedAt, timeZone)}</time>
               </span>
-              <Button
+              <button
+                className="primary-button generate-button"
+                disabled={Boolean(actionKey) || isPreviewing}
+                onClick={() => void handleGenerate()}
+                title={isPreviewing ? '履歴プレビューを終了してから実行してください' : undefined}
+                type="button"
+              >
+                {actionKey === 'generate' ? (
+                  <LoaderCircle aria-hidden="true" className="button-icon animate-spin" />
+                ) : (
+                  <Sparkles aria-hidden="true" className="button-icon" />
+                )}
+                {actionKey === 'generate' ? 'AIが構成中' : isRegeneration ? 'AIで再生成' : 'AIで生成'}
+              </button>
+              <button
                 aria-controls="plan-history-drawer"
                 aria-expanded={historyOpen}
-                className="min-h-11"
+                className="history-button"
                 onClick={() => setHistoryOpen((open) => !open)}
                 type="button"
-                variant="outline"
               >
-                <History aria-hidden="true" className="size-4" />
-                変更履歴（{versions.length}）
-              </Button>
+                <History aria-hidden="true" className="button-icon" />
+                変更履歴 <span>（{versions.length}）</span>
+              </button>
             </div>
           </div>
 
-          <div className="border-b bg-muted/30 p-4 text-sm text-muted-foreground">
-            <p>各行が投票単位の時間帯スロットです。同じスロットの候補を横に比較できます。</p>
-            <div aria-label="状態の凡例" className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs">
-              <span className="inline-flex items-center gap-1.5">
-                <VoteIcon aria-hidden="true" className="size-4" /> 投票受付中
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <CheckCircle2 aria-hidden="true" className="size-4" /> 確定済み
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <Trophy aria-hidden="true" className="size-4" /> 最多票
-              </span>
-            </div>
+          <div className="timeline-guide">
+            縦軸は案ごとの比較です。チャット由来の競合候補と、AIが空き時間に提案した予定を分けて表示しています。
+          </div>
+          <div aria-label="予定の種類" className="plan-legend">
+            <span className="plan-legend-item">
+              <i className="plan-legend-swatch conflict" />競合候補 / 投票中
+            </span>
+            <span className="plan-legend-item">
+              <i className="plan-legend-swatch ai" />AI提案 / 空き時間
+            </span>
           </div>
 
-          {displaySlots.length === 0 ? (
-            <div className="grid min-h-64 place-items-center p-6 text-center">
-              <div className="max-w-md">
-                <Bot aria-hidden="true" className="mx-auto size-8 text-muted-foreground" />
-                <h2 className="mt-3 font-semibold">まだタイムラインがありません</h2>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  アイデアボードの有効な付箋をもとに、上の「AIで生成」から旅程を作成できます。
-                </p>
-              </div>
+          {!activeSlotGroup ? (
+            <div className="timeline-empty">
+              <Sparkles aria-hidden="true" />
+              <h2>まだタイムラインがありません</h2>
+              <p>アイデアボードの有効な付箋をもとに、「AIで生成」から旅程を作成できます。</p>
             </div>
           ) : (
-            <div>
-              {slotGroups.map((group, groupIndex) => (
-                <section aria-labelledby={`plan-day-${groupIndex}`} key={group.key}>
-                  <div className="flex items-center gap-2 border-b bg-muted/20 px-4 py-3">
-                    <CalendarDays aria-hidden="true" className="size-4" />
-                    <h2 className="text-sm font-semibold" id={`plan-day-${groupIndex}`}>
-                      {group.label}
-                    </h2>
-                    <span className="text-xs text-muted-foreground">{group.slots.length}時間帯</span>
-                  </div>
-                  <ol className="divide-y">
-                    {group.slots.map((slot) => (
-                      <TimelineSlot
-                        actionKey={actionKey}
-                        key={slot.id}
-                        onConfirm={(slotId, optionId) => void handleConfirm(slotId, optionId)}
-                        onVote={(slotId, optionId) => void handleVote(slotId, optionId)}
-                        options={optionsBySlot.get(slot.id) ?? EMPTY_OPTIONS}
-                        previewMode={isPreviewing}
-                        slot={slot}
-                        timeZone={timeZone}
-                        tripId={tripId}
-                        userId={userId}
-                        votes={displayVotes.filter((vote) => vote.slot_id === slot.id)}
-                      />
+            <div className="timeline-scroll">
+              <div className="timeline">
+                <div className="timeline-head">
+                  <div className="timeline-label">時間 / 案の比較</div>
+                  <div
+                    className="hours"
+                    style={{ gridTemplateColumns: `repeat(${timelineScale.hours.length}, minmax(74px, 1fr))` }}
+                  >
+                    {timelineScale.hours.map((hour) => (
+                      <span key={hour}>{formatHourLabel(hour, timeZone)}</span>
                     ))}
-                  </ol>
-                </section>
-              ))}
+                  </div>
+                </div>
+                <TimelineRows
+                  actionKey={actionKey}
+                  onConfirm={(slotId, optionId) => void handleConfirm(slotId, optionId)}
+                  onVote={(slotId, optionId) => void handleVote(slotId, optionId)}
+                  optionsBySlot={optionsBySlot}
+                  previewMode={isPreviewing}
+                  scale={timelineScale}
+                  slots={activeSlotGroup.slots}
+                  timeZone={timeZone}
+                  tripId={tripId}
+                  userId={userId}
+                  votes={displayVotes}
+                />
+              </div>
             </div>
           )}
 
-          <div className="flex flex-col gap-2 border-t bg-muted/20 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
-            <span className="inline-flex items-center gap-2 text-muted-foreground">
-              <ExternalLink aria-hidden="true" className="size-4" />
-              このプランはアイデアボードの付箋から構成されています。
-            </span>
-            <Link
-              className="inline-flex min-h-11 items-center font-medium underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              to={`/trips/${tripId}/ideas`}
-            >
-              元の付箋を確認・編集する
-            </Link>
+          <div className="source-strip">
+            <span aria-hidden="true">↗</span>
+            <span>このプランは画面1の付箋から作られています</span>
+            <Link to={`/trips/${tripId}/ideas`}>付箋を編集して更新する</Link>
           </div>
         </section>
 
-        {historyOpen && (
-          <HistoryDrawer
-            actionKey={actionKey}
-            currentVersion={planState.plan.current_version}
-            onCancelRestore={() => setRestoreTargetVersion(null)}
-            onClose={() => setHistoryOpen(false)}
-            onRequestRestore={(version) => {
-              setRestoreTargetVersion(version)
-              setPreviewVersionNumber(version)
-            }}
-            onRestore={(version) => void handleRestore(version)}
-            onTogglePreview={(version) => {
-              setPreviewVersionNumber((current) => (current === version ? null : version))
-              setRestoreTargetVersion(null)
-            }}
-            panelRef={historyPanelRef}
-            planState={planState}
-            previewVersionNumber={previewVersionNumber}
-            restoreTargetVersion={restoreTargetVersion}
-            timeZone={timeZone}
-            userId={userId}
-            versions={versions}
-          />
-        )}
+        <HistoryDrawer
+          actionKey={actionKey}
+          currentVersion={planState.plan.current_version}
+          hidden={!historyOpen}
+          onCancelRestore={() => setRestoreTargetVersion(null)}
+          onClose={() => setHistoryOpen(false)}
+          onRequestRestore={(version) => {
+            setRestoreTargetVersion(version)
+            setPreviewVersionNumber(version)
+          }}
+          onRestore={(version) => void handleRestore(version)}
+          onTogglePreview={(version) => {
+            setPreviewVersionNumber((current) => (current === version ? null : version))
+            setRestoreTargetVersion(null)
+          }}
+          panelRef={historyPanelRef}
+          planState={planState}
+          previewVersionNumber={previewVersionNumber}
+          restoreTargetVersion={restoreTargetVersion}
+          timeZone={timeZone}
+          userId={userId}
+          versions={versions}
+        />
       </div>
     </div>
   )
 }
 
-type TimelineSlotProps = {
-  slot: PlanSlot
-  options: PlanOption[]
+type TimelineScale = {
+  start: number
+  end: number
+  hours: number[]
+}
+
+type TimelineRowsProps = {
+  slots: PlanSlot[]
+  optionsBySlot: Map<string, PlanOption[]>
   votes: Vote[]
   userId: string
   tripId: string
   timeZone: string
   actionKey: string | null
   previewMode: boolean
+  scale: TimelineScale
   onVote: (slotId: string, optionId: string) => void
   onConfirm: (slotId: string, optionId: string) => void
+}
+
+function TimelineRows({ slots, optionsBySlot, ...props }: TimelineRowsProps) {
+  return (
+    <div className="timeline-rows">
+      {slots.map((slot) => (
+        <TimelineSlot key={slot.id} options={optionsBySlot.get(slot.id) ?? EMPTY_OPTIONS} slot={slot} {...props} />
+      ))}
+    </div>
+  )
+}
+
+type TimelineSlotProps = Omit<TimelineRowsProps, 'slots' | 'optionsBySlot'> & {
+  slot: PlanSlot
+  options: PlanOption[]
 }
 
 function TimelineSlot({
@@ -452,12 +471,15 @@ function TimelineSlot({
   timeZone,
   actionKey,
   previewMode,
+  scale,
   onVote,
   onConfirm,
 }: TimelineSlotProps) {
   const voteCounts = new Map(options.map((option) => [option.id, 0]))
   for (const vote of votes) {
-    if (voteCounts.has(vote.option_id)) voteCounts.set(vote.option_id, (voteCounts.get(vote.option_id) ?? 0) + 1)
+    if (vote.slot_id === slot.id && voteCounts.has(vote.option_id)) {
+      voteCounts.set(vote.option_id, (voteCounts.get(vote.option_id) ?? 0) + 1)
+    }
   }
 
   const maximumVotes = options.length ? Math.max(...options.map((option) => voteCounts.get(option.id) ?? 0)) : 0
@@ -466,47 +488,37 @@ function TimelineSlot({
       ? options.filter((option) => (voteCounts.get(option.id) ?? 0) === maximumVotes).map((option) => option.id)
       : [],
   )
-  const ownVote = votes.find((vote) => vote.user_id === userId)
+  const ownVote = votes.find((vote) => vote.slot_id === slot.id && vote.user_id === userId)
   const ownOption = ownVote ? options.find((option) => option.id === ownVote.option_id) : undefined
   const slotIsConfirmed = slot.status === 'confirmed'
-  const confirmedOptionExists = options.some((option) => option.id === slot.confirmed_option_id)
+  const rowHeight = Math.max(150, options.length * 126 + 20)
 
   return (
-    <li className="grid md:grid-cols-[10rem_minmax(0,1fr)]">
-      <div className="border-b bg-muted/10 p-4 md:border-r md:border-b-0">
-        <div className="flex items-center gap-2 font-semibold">
-          <Clock3 aria-hidden="true" className="size-4" />
-          {formatTimeRange(slot.start_at, slot.end_at, timeZone)}
-        </div>
-        <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium">
-          {slotIsConfirmed ? (
-            <CheckCircle2 aria-hidden="true" className="size-4" />
-          ) : (
-            <VoteIcon aria-hidden="true" className="size-4" />
-          )}
-          {slotIsConfirmed
-            ? confirmedOptionExists
-              ? '確定済み'
-              : '確定案を確認できません'
-            : '投票受付中'}
-        </p>
-        <p className="mt-1 text-xs text-muted-foreground">候補 {options.length}件</p>
-        <p className="mt-3 text-xs text-muted-foreground">
+    <section
+      aria-label={`${formatTimeRange(slot.start_at, slot.end_at, timeZone)}の候補`}
+      className={`timeline-row ${options.length > 1 ? 'candidate-row' : 'suggestion-row'}`}
+      style={{ minHeight: rowHeight }}
+    >
+      <div className={`row-label ${options.length > 1 ? 'candidate-label' : 'suggestion-label'}`}>
+        <span className="candidate-name">
+          {slotIsConfirmed ? '確定した予定' : options.length > 1 ? '競合候補' : 'AI提案'}
+        </span>
+        <strong>{formatTimeRange(slot.start_at, slot.end_at, timeZone)}</strong>
+        <span className="candidate-meta">
           {previewMode
-            ? '履歴プレビュー（投票情報なし）'
-            : ownOption
-              ? `あなたは「${ownOption.title}」に投票済み`
-              : ownVote
-                ? '以前の投票先は現在の候補にありません'
-                : 'あなたは未投票'}
-        </p>
+            ? '履歴プレビュー'
+            : slotIsConfirmed
+              ? '採用案を確定済み'
+              : ownOption
+                ? `「${ownOption.title}」に投票済み`
+                : `${options.length}案から投票`}
+        </span>
       </div>
-
-      <div className="grid gap-3 p-4 xl:grid-cols-2">
+      <div className="time-track" style={{ minHeight: rowHeight }}>
         {options.length === 0 ? (
-          <p className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground">この時間帯には候補がありません。</p>
+          <p className="timeline-row-empty">この時間帯には候補がありません。</p>
         ) : (
-          options.map((option) => {
+          options.map((option, index) => {
             const count = voteCounts.get(option.id) ?? 0
             const isTop = topOptionIds.has(option.id)
             const tiedForTop = topOptionIds.size > 1
@@ -514,123 +526,68 @@ function TimelineSlot({
             const isConfirmedOption = slot.confirmed_option_id === option.id
             const isNotSelected = slotIsConfirmed && !isConfirmedOption
             const metadata = optionMetadata(option)
-            const voteBusy = actionKey === `vote:${option.id}`
-            const confirmBusy = actionKey === `confirm:${option.id}`
+            const position = timelinePosition(option, scale)
+            const visualClass = isConfirmedOption
+              ? 'draft'
+              : options.length > 1
+                ? 'option'
+                : 'ai-suggestion'
 
             return (
               <article
-                className={`flex min-w-0 flex-col rounded-xl border p-4 ${
-                  isConfirmedOption
-                    ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
-                    : isNotSelected
-                      ? 'border-dashed bg-muted/20'
-                      : 'bg-background'
-                }`}
+                className={`schedule-block ${visualClass}${isNotSelected ? ' rejected' : ''}`}
                 key={option.id}
+                style={{ left: position.left, top: 12 + index * 126, width: position.width }}
               >
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                  <span className="rounded-full border px-2 py-1 font-medium">{kindLabel(option.kind)}</span>
-                  <span className="rounded-full border px-2 py-1 font-medium">
-                    {option.user_touched ? '手動調整済み' : '自動構成'}
-                  </span>
-                  {isConfirmedOption && (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2 py-1 font-semibold">
-                      <CheckCircle2 aria-hidden="true" className="size-3.5" /> 確定案
-                    </span>
-                  )}
-                  {isNotSelected && <span className="rounded-full border px-2 py-1 font-medium">未採用</span>}
-                  {!previewMode && !slotIsConfirmed && isTop && (
-                    <span className="inline-flex items-center gap-1 rounded-full border px-2 py-1 font-semibold">
-                      <Trophy aria-hidden="true" className="size-3.5" />
-                      {tiedForTop ? '同率最多' : '最多票'}
-                    </span>
-                  )}
-                  {!previewMode && isOwnVote && (
-                    <span className="inline-flex items-center gap-1 rounded-full border px-2 py-1 font-semibold">
-                      <Check aria-hidden="true" className="size-3.5" /> あなたの投票
-                    </span>
-                  )}
-                </div>
-
-                <h3 className="mt-3 font-semibold leading-snug">{option.title}</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <span className="schedule-origin">
+                  {isConfirmedOption
+                    ? '採用済み'
+                    : options.length > 1
+                      ? `${kindLabel(option.kind)}候補`
+                      : 'AIが空き時間に提案'}
+                </span>
+                <h3 className="schedule-title">{option.title}</h3>
+                <p className="schedule-meta">
                   {option.kind === 'all_day' ? '終日予定' : formatTimeRange(option.start_at, option.end_at, timeZone)}
+                  {metadata[0] ? ` · ${metadata[0].value}` : ''}
                 </p>
-
-                {metadata.length > 0 && (
-                  <dl className="mt-3 space-y-1.5 text-sm">
-                    {metadata.map((item) => (
-                      <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-2" key={item.label}>
-                        <dt className="text-muted-foreground">{item.label}</dt>
-                        <dd className="min-w-0 break-words">{item.value}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                )}
-
-                {option.reason && (
-                  <p className="mt-3 rounded-lg bg-muted/50 p-3 text-xs leading-relaxed text-muted-foreground">
-                    <span className="font-semibold text-foreground">配置理由：</span>
-                    {option.reason}
-                  </p>
-                )}
-
+                {option.reason && <span className="schedule-reason">{option.reason}</span>}
                 {option.note_id && (
-                  <Link
-                    className="mt-3 inline-flex min-h-11 w-fit items-center gap-1.5 text-sm font-medium underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    to={`/trips/${tripId}/ideas#${encodeURIComponent(option.note_id)}`}
-                  >
-                    元の付箋を見る <ExternalLink aria-hidden="true" className="size-3.5" />
+                  <Link className="schedule-note" to={`/trips/${tripId}/ideas#${encodeURIComponent(option.note_id)}`}>
+                    元の付箋を見る ↗
                   </Link>
                 )}
-
                 {previewMode ? (
-                  <p className="mt-auto border-t pt-3 text-xs text-muted-foreground">この履歴には投票数が保存されていません。</p>
+                  <span className="schedule-reason">履歴には投票数が保存されていません</span>
+                ) : slotIsConfirmed ? (
+                  <span className="schedule-reason">
+                    {isConfirmedOption ? 'この案が採用されています' : '別の案が採用されています'}
+                  </span>
                 ) : (
-                  <div className="mt-auto border-t pt-3">
-                    <p className="inline-flex items-center gap-1.5 text-sm font-semibold">
-                      <VoteIcon aria-hidden="true" className="size-4" /> {count}票
-                    </p>
-                    {slotIsConfirmed ? (
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        {isConfirmedOption ? 'この案が採用されています。' : '別の案が採用されています。'}
-                      </p>
-                    ) : (
-                      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                        <Button
-                          aria-pressed={isOwnVote}
-                          className="min-h-11 whitespace-normal"
-                          disabled={Boolean(actionKey) || isOwnVote}
-                          onClick={() => onVote(slot.id, option.id)}
-                          type="button"
-                          variant="outline"
-                        >
-                          {voteBusy ? (
-                            <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-                          ) : isOwnVote ? (
-                            <Check aria-hidden="true" className="size-4" />
-                          ) : (
-                            <VoteIcon aria-hidden="true" className="size-4" />
-                          )}
-                          {voteBusy ? '投票中' : isOwnVote ? '投票済み' : 'この案に投票'}
-                        </Button>
-                        {isTop && (
-                          <Button
-                            className="min-h-11 whitespace-normal"
-                            disabled={Boolean(actionKey)}
-                            onClick={() => onConfirm(slot.id, option.id)}
-                            type="button"
-                            variant="secondary"
-                          >
-                            {confirmBusy ? (
-                              <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-                            ) : (
-                              <Trophy aria-hidden="true" className="size-4" />
-                            )}
-                            {confirmBusy ? '確定中' : tiedForTop ? '同率最多からこの案を確定' : '最多票案を確定'}
-                          </Button>
-                        )}
-                      </div>
+                  <div className="vote-row">
+                    <button
+                      aria-pressed={isOwnVote}
+                      className={`vote-button${isOwnVote ? ' voted' : ''}`}
+                      disabled={Boolean(actionKey) || isOwnVote}
+                      onClick={() => onVote(slot.id, option.id)}
+                      type="button"
+                    >
+                      {actionKey === `vote:${option.id}` ? '投票中…' : isOwnVote ? '投票済み' : 'この案に投票'}
+                    </button>
+                    <span className="vote-count">{count}票</span>
+                    {isTop && (
+                      <button
+                        className="adopt-button"
+                        disabled={Boolean(actionKey)}
+                        onClick={() => onConfirm(slot.id, option.id)}
+                        type="button"
+                      >
+                        {actionKey === `confirm:${option.id}`
+                          ? '確定中…'
+                          : tiedForTop
+                            ? '同率最多から採用'
+                            : '最多票案を採用'}
+                      </button>
                     )}
                   </div>
                 )}
@@ -639,11 +596,12 @@ function TimelineSlot({
           })
         )}
       </div>
-    </li>
+    </section>
   )
 }
 
 type HistoryDrawerProps = {
+  hidden: boolean
   versions: PlanVersion[]
   currentVersion: number
   previewVersionNumber: number | null
@@ -661,6 +619,7 @@ type HistoryDrawerProps = {
 }
 
 function HistoryDrawer({
+  hidden,
   versions,
   currentVersion,
   previewVersionNumber,
@@ -681,7 +640,8 @@ function HistoryDrawer({
   return (
     <aside
       aria-labelledby="plan-history-title"
-      className="max-h-[calc(100vh-6rem)] overflow-y-auto rounded-xl border bg-card shadow-lg xl:sticky xl:top-20"
+      className="history-drawer"
+      hidden={hidden}
       id="plan-history-drawer"
       ref={panelRef}
       tabIndex={-1}
@@ -970,6 +930,40 @@ function normalizeJson(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(normalizeJson)
   if (!isRecord(value)) return value
   return Object.fromEntries(Object.keys(value).sort().map((key) => [key, normalizeJson(value[key])]))
+}
+
+function createTimelineScale(slots: PlanSlot[], options: PlanOption[], _timeZone: string): TimelineScale {
+  const starts = [...slots.map((slot) => timestamp(slot.start_at)), ...options.map((option) => timestamp(option.start_at))]
+    .filter(Number.isFinite)
+  const ends = [...slots.map((slot) => timestamp(slot.end_at)), ...options.map((option) => timestamp(option.end_at))]
+    .filter(Number.isFinite)
+  const hour = 60 * 60 * 1000
+  const fallbackStart = new Date().setHours(9, 0, 0, 0)
+  const start = starts.length ? Math.floor(Math.min(...starts) / hour) * hour : fallbackStart
+  const rawEnd = ends.length ? Math.ceil(Math.max(...ends) / hour) * hour : start + 10 * hour
+  const end = rawEnd > start ? rawEnd : start + hour
+  const hourCount = Math.max(1, Math.min(24, Math.ceil((end - start) / hour)))
+  return {
+    start,
+    end,
+    hours: Array.from({ length: hourCount }, (_, index) => start + index * hour),
+  }
+}
+
+function timelinePosition(option: PlanOption, scale: TimelineScale) {
+  if (option.kind === 'all_day') return { left: '0%', width: '100%' }
+  const duration = Math.max(1, scale.end - scale.start)
+  const optionStart = timestamp(option.start_at)
+  const optionEnd = timestamp(option.end_at)
+  if (!Number.isFinite(optionStart) || !Number.isFinite(optionEnd)) return { left: '0%', width: '20%' }
+  const left = Math.min(100, Math.max(0, ((optionStart - scale.start) / duration) * 100))
+  const available = Math.max(0, 100 - left)
+  const width = Math.min(available, Math.max(8, ((optionEnd - optionStart) / duration) * 100))
+  return { left: `${left}%`, width: `${width}%` }
+}
+
+function formatHourLabel(value: number, timeZone: string): string {
+  return formatValue(new Date(value).toISOString(), timeZone, { hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
 function groupSlotsByDate(slots: PlanSlot[], timeZone: string) {

@@ -20,21 +20,17 @@ import listPlugin from '@fullcalendar/list'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import {
   AlertTriangle,
-  CalendarDays,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
   Cloud,
   Download,
   HardDrive,
   LoaderCircle,
-  MapPin,
   Pencil,
   Plus,
   RefreshCw,
 } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { ErrorState, LoadingState } from '@/components/layout/states'
+import { LoadingState } from '@/components/layout/states'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -237,15 +233,24 @@ function formatOptionalDateTime(value: unknown): string {
 
 function renderCalendarEvent(content: EventContentArg) {
   const source = content.event.extendedProps.source === 'plan' ? 'plan' : 'personal'
+  const location = typeof content.event.extendedProps.location === 'string' ? content.event.extendedProps.location : ''
   const isAgenda = content.view.type.startsWith('list')
 
+  if (isAgenda) {
+    return (
+      <div className="calendar-agenda-content">
+        <strong>{content.event.title}</strong>
+        {location && <small>{location}</small>}
+        <span className={`agenda-badge ${source === 'plan' ? 'plan' : 'personal'}`}>{sourceLabel(source)}</span>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 px-0.5 py-0.5 text-xs leading-tight">
-      <span className="rounded-sm border border-current/30 bg-background/75 px-1 py-0.5 font-semibold">
-        {sourceLabel(source)}
-      </span>
-      {!isAgenda && content.timeText && <span className="font-medium">{content.timeText}</span>}
-      <span className="min-w-0 font-semibold">{content.event.title}</span>
+    <div className="calendar-event-content">
+      <span className="event-type">{sourceLabel(source)}</span>
+      <strong>{content.event.title}</strong>
+      <small>{[content.timeText, location].filter(Boolean).join('　')}</small>
     </div>
   )
 }
@@ -325,15 +330,18 @@ export function CalendarPage({ userId }: { userId: string }) {
             start: event.startAt,
             end: event.endAt,
             allDay: event.allDay,
-            backgroundColor: isPlan
-              ? 'color-mix(in oklch, var(--destructive) 10%, var(--card))'
-              : 'var(--secondary)',
-            borderColor: isPlan ? 'var(--destructive)' : 'var(--foreground)',
-            textColor: 'var(--foreground)',
-            classNames: isSelected ? ['ring-2', 'ring-ring', 'ring-offset-1'] : [],
+            backgroundColor: isPlan ? '#fff2ef' : '#eff5fc',
+            borderColor: isPlan ? '#e87561' : '#4e82c4',
+            textColor: '#263238',
+            classNames: [
+              'aiau-calendar-event',
+              isPlan ? 'aiau-plan-event' : 'aiau-personal-event',
+              ...(isSelected ? ['is-selected'] : []),
+            ],
             extendedProps: {
               source: event.source,
               calendarEventId: event.id,
+              location: getStringAttribute(event.attrs, 'address', 'location'),
             },
           }
         }),
@@ -625,120 +633,78 @@ export function CalendarPage({ userId }: { userId: string }) {
   const selectedCost = selectedEvent ? getStringAttribute(selectedEvent.attrs, 'cost') : ''
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className="calendar-page page-shell">
+      <header className="page-title">
         <div>
-          <p className="text-sm font-semibold tracking-wide text-muted-foreground">SCREEN 03 · CALENDAR</p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight">カレンダー</h1>
-          <p className="mt-2 text-muted-foreground">旅の予定も、いつもの予定も、ひとつの場所で。</p>
+          <span className="eyebrow">SCREEN 03 · CALENDAR</span>
+          <h1>カレンダー</h1>
+          <p>旅の予定も、いつもの予定も、ひとつの場所で。</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="title-actions">
           {selectedExportTarget && (
-            <Link
-              className="inline-flex min-h-11 items-center justify-center rounded-lg border bg-background px-4 text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-              to={`/trips/${selectedExportTarget.trip.id}/plan`}
-            >
-              プランを見る
+            <Link className="secondary-button" to={`/trips/${selectedExportTarget.trip.id}/plan`}>
+              ← プランを見る
             </Link>
           )}
-          <Button className="min-h-11 px-4" onClick={() => openCreateEditor()}>
-            <Plus aria-hidden="true" />
-            予定を追加
-          </Button>
+          <button className="primary-button" onClick={() => openCreateEditor()} type="button">
+            ＋ 予定を追加
+          </button>
         </div>
       </header>
 
       {error && (
-        <div className="space-y-2">
-          <ErrorState message={error} />
-          <Button className="min-h-11" variant="outline" onClick={() => void refreshCalendar()}>
+        <div className="calendar-feedback" role="alert">
+          <span>{error}</span>
+          <button className="secondary-button" onClick={() => void refreshCalendar()} type="button">
             <RefreshCw aria-hidden="true" />
             再読み込み
-          </Button>
+          </button>
         </div>
       )}
 
       {notice && (
-        <div
-          className="flex min-h-11 items-center gap-2 rounded-lg border bg-card px-4 py-2 text-sm"
-          role="status"
-        >
-          <CheckCircle2 aria-hidden="true" className="size-5" />
-          {notice}
+        <div className="calendar-feedback success" role="status">
+          <CheckCircle2 aria-hidden="true" />
+          <span>{notice}</span>
         </div>
       )}
 
-      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
-        <section className="min-w-0 overflow-hidden rounded-xl border bg-card" aria-label="予定カレンダー">
-          <div className="flex flex-col gap-3 border-b p-3 lg:flex-row lg:items-center lg:justify-between lg:p-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                aria-label="前の期間"
-                className="min-h-11 min-w-11"
-                size="icon"
-                variant="outline"
-                onClick={() => calendarRef.current?.getApi().prev()}
-              >
-                <ChevronLeft aria-hidden="true" />
-              </Button>
-              <p className="min-w-48 text-center text-sm font-bold sm:text-base" aria-live="polite">
-                {calendarTitle}
-              </p>
-              <Button
-                aria-label="次の期間"
-                className="min-h-11 min-w-11"
-                size="icon"
-                variant="outline"
-                onClick={() => calendarRef.current?.getApi().next()}
-              >
-                <ChevronRight aria-hidden="true" />
-              </Button>
-              <Button
-                className="min-h-11"
-                variant="outline"
-                onClick={() => calendarRef.current?.getApi().today()}
-              >
-                今日
-              </Button>
+      <div className="calendar-grid">
+        <section aria-label="予定カレンダー" className="surface-card calendar-main">
+          <div className="calendar-toolbar">
+            <div className="calendar-date">
+              <button aria-label="前の期間" onClick={() => calendarRef.current?.getApi().prev()} type="button">‹</button>
+              <span aria-live="polite">{calendarTitle}</span>
+              <button aria-label="次の期間" onClick={() => calendarRef.current?.getApi().next()} type="button">›</button>
+              <button className="calendar-today" onClick={() => calendarRef.current?.getApi().today()} type="button">今日</button>
               {refreshing && (
-                <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status">
-                  <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-                  更新中
+                <span className="calendar-refreshing" role="status">
+                  <LoaderCircle aria-hidden="true" />更新中
                 </span>
               )}
             </div>
-            <div
-              className="grid grid-cols-4 gap-1 rounded-lg bg-muted p-1"
-              role="group"
-              aria-label="カレンダー表示"
-            >
+            <div aria-label="カレンダー表示" className="view-tabs" role="group">
               {CALENDAR_VIEWS.map((view) => (
-                <Button
+                <button
                   aria-pressed={activeView === view.id}
-                  className="min-h-11 px-3"
+                  className={`view-tab${activeView === view.id ? ' active' : ''}`}
                   key={view.id}
-                  variant={activeView === view.id ? 'default' : 'ghost'}
                   onClick={() => changeView(view.id)}
+                  type="button"
                 >
                   {view.label}
-                </Button>
+                </button>
               ))}
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b px-4 py-3 text-sm text-muted-foreground">
-            <span className="inline-flex items-center gap-2">
-              <span aria-hidden="true" className="size-3 rounded-sm border border-destructive bg-destructive/15" />
-              プラン予定
-            </span>
-            <span className="inline-flex items-center gap-2">
-              <span aria-hidden="true" className="size-3 rounded-sm border border-foreground bg-secondary" />
-              個人予定
-            </span>
-            <span className="ml-auto text-xs">タイムゾーン: {timezone}</span>
+          <div className="legend">
+            <span className="legend-item"><i aria-hidden="true" className="legend-color coral" />プラン予定</span>
+            <span className="legend-item"><i aria-hidden="true" className="legend-color blue" />個人予定</span>
+            <span className="calendar-timezone">タイムゾーン: {timezone}</span>
           </div>
 
-          <div className="min-w-0 p-2 sm:p-4 [&_.fc]:text-sm [&_.fc-event]:cursor-pointer [&_.fc-event]:overflow-hidden [&_.fc-list-event]:min-h-11 [&_.fc-more-link]:font-semibold [&_.fc-scrollgrid]:border-border [&_.fc-theme-standard_td]:border-border [&_.fc-theme-standard_th]:border-border">
+          <div className="calendar-fullcalendar calendar-view">
             <FullCalendar
               ref={calendarRef}
               allDayText="終日"
@@ -755,7 +721,7 @@ export function CalendarPage({ userId }: { userId: string }) {
               height="auto"
               initialView={initialViewRef.current}
               locale={jaLocale}
-              noEventsContent={() => <p className="p-4 text-muted-foreground">この期間に予定はありません</p>}
+              noEventsContent={() => <p className="calendar-empty">この期間に予定はありません</p>}
               nowIndicator
               plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
               scrollTime="08:00:00"
@@ -765,104 +731,56 @@ export function CalendarPage({ userId }: { userId: string }) {
           </div>
         </section>
 
-        <aside className="space-y-4">
-          <section className="rounded-xl border bg-card p-4" aria-labelledby="event-detail-heading">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="font-semibold" id="event-detail-heading">予定の詳細</h2>
-              <span className="text-xs text-muted-foreground">選択すると表示</span>
-            </div>
+        <aside className="surface-card calendar-side">
+          <div className="side-heading">
+            <h2 id="event-detail-heading">予定の詳細</h2>
+            <span>選択すると表示</span>
+          </div>
 
-            {selectedEvent ? (
-              <div className="mt-4">
-                <span className="inline-flex items-center gap-1.5 rounded-md border bg-muted px-2 py-1 text-xs font-semibold">
-                  <CalendarDays aria-hidden="true" className="size-3.5" />
-                  {sourceLabel(selectedEvent.source)}
-                </span>
-                <h3 className="mt-3 text-lg font-bold">{selectedEvent.title}</h3>
-                <dl className="mt-4 space-y-3 text-sm">
-                  <div>
-                    <dt className="font-semibold text-muted-foreground">日時</dt>
-                    <dd className="mt-1 leading-6">{formatEventPeriod(selectedEvent)}</dd>
-                  </div>
-                  {selectedAddress && (
-                    <div>
-                      <dt className="font-semibold text-muted-foreground">場所</dt>
-                      <dd className="mt-1 flex gap-1.5 leading-6">
-                        <MapPin aria-hidden="true" className="mt-1 size-4 shrink-0" />
-                        {selectedAddress}
-                      </dd>
-                    </div>
-                  )}
-                  {selectedMemo && (
-                    <div>
-                      <dt className="font-semibold text-muted-foreground">メモ</dt>
-                      <dd className="mt-1 whitespace-pre-wrap leading-6">{selectedMemo}</dd>
-                    </div>
-                  )}
-                  {selectedCost && (
-                    <div>
-                      <dt className="font-semibold text-muted-foreground">費用</dt>
-                      <dd className="mt-1">{selectedCost}</dd>
-                    </div>
-                  )}
-                </dl>
-
-                <div className="mt-4 grid gap-2 border-t pt-4">
-                  {selectedEvent.source === 'personal' && (
-                    <Button
-                      className="min-h-11 w-full"
-                      variant="outline"
-                      onClick={() => openEditEditor(selectedEvent)}
-                    >
-                      <Pencil aria-hidden="true" />
-                      個人予定を編集
-                    </Button>
-                  )}
-                  {selectedEventTarget && (
-                    <Link
-                      className="inline-flex min-h-11 items-center justify-center rounded-lg border px-3 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                      to={`/trips/${selectedEventTarget.trip.id}/plan`}
-                    >
-                      プランを開く
-                    </Link>
-                  )}
-                  {selectedEvent.noteId && selectedEventTarget && (
-                    <Link
-                      className="inline-flex min-h-11 items-center justify-center rounded-lg border px-3 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                      to={`/trips/${selectedEventTarget.trip.id}/ideas#${selectedEvent.noteId}`}
-                    >
-                      元の付箋を見る
-                    </Link>
-                  )}
-                </div>
+          {selectedEvent ? (
+            <div aria-labelledby="event-detail-heading" className="event-detail">
+              <span className="detail-label">{sourceLabel(selectedEvent.source)}</span>
+              <h3>{selectedEvent.title}</h3>
+              <dl className="detail-list">
+                <div><dt>日時</dt><dd>{formatEventPeriod(selectedEvent)}</dd></div>
+                <div><dt>場所</dt><dd>{selectedAddress || '場所の指定なし'}</dd></div>
+                <div><dt>メモ</dt><dd className="detail-memo">{selectedMemo || 'メモはありません。'}</dd></div>
+                {selectedCost && <div><dt>費用</dt><dd>{selectedCost}</dd></div>}
+              </dl>
+              <div className="detail-links">
+                {selectedEvent.source === 'personal' && (
+                  <button className="text-button" onClick={() => openEditEditor(selectedEvent)} type="button">
+                    個人予定を編集 →
+                  </button>
+                )}
+                {selectedEvent.noteId && selectedEventTarget && (
+                  <Link to={`/trips/${selectedEventTarget.trip.id}/ideas#${selectedEvent.noteId}`}>元の付箋を見る ↗</Link>
+                )}
+                {selectedEventTarget && (
+                  <Link to={`/trips/${selectedEventTarget.trip.id}/plan`}>プランを開く ↗</Link>
+                )}
               </div>
-            ) : (
-              <p className="mt-4 rounded-lg border border-dashed p-6 text-center text-sm leading-6 text-muted-foreground">
-                カレンダーの予定を選ぶと、日時・場所・メモなどを確認できます。
-              </p>
-            )}
-          </section>
-
-          <section className="rounded-xl border bg-card p-4" aria-labelledby="ics-heading">
-            <div className="flex items-center gap-2">
-              <Download aria-hidden="true" className="size-5" />
-              <h2 className="font-semibold" id="ics-heading">ICS export</h2>
             </div>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              旅行に紐づく確定プランを、カレンダーファイルとして書き出します。
-            </p>
+          ) : (
+            <div aria-labelledby="event-detail-heading" className="empty-detail">
+              カレンダーの予定を選ぶと、<br />日時・場所・メモなどを<br />ここで確認できます。
+            </div>
+          )}
+
+          <section aria-labelledby="ics-heading" className="sync-card">
+            <strong id="ics-heading">カレンダーへの書き出し</strong>
+            <p>旅行に紐づく確定プランを、ICSカレンダーファイルとして書き出します。</p>
 
             {exportTargetsLoading ? (
-              <p className="mt-4 flex min-h-11 items-center gap-2 text-sm text-muted-foreground" role="status">
-                <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-                旅行とプランを読み込み中
+              <p className="calendar-export-status" role="status">
+                <LoaderCircle aria-hidden="true" />旅行とプランを読み込み中
               </p>
             ) : (
-              <div className="mt-4 space-y-3">
-                <label className="grid gap-1.5 text-sm font-medium" htmlFor="ics-plan">
+              <div className="calendar-export-controls">
+                <label className="form-field" htmlFor="ics-plan">
                   旅行 / プランを選択
                   <select
-                    className={FIELD_CLASS_NAME}
+                    className="calendar-select"
                     disabled={exportTargets.length === 0 || exporting}
                     id="ics-plan"
                     value={selectedPlanId}
@@ -876,31 +794,24 @@ export function CalendarPage({ userId }: { userId: string }) {
                     ))}
                   </select>
                 </label>
-                <Button
-                  className="min-h-11 w-full"
+                <button
+                  className="calendar-export-button primary-button"
                   disabled={!selectedExportTarget || exporting}
                   onClick={() => void handleExportIcs()}
+                  type="button"
                 >
-                  {exporting ? (
-                    <LoaderCircle aria-hidden="true" className="animate-spin" />
-                  ) : (
-                    <Download aria-hidden="true" />
-                  )}
+                  {exporting ? <LoaderCircle aria-hidden="true" /> : <Download aria-hidden="true" />}
                   {exporting ? '書き出し中' : 'ICSを書き出す'}
-                </Button>
+                </button>
               </div>
             )}
 
-            {exportError && (
-              <p className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm" role="alert">
-                {exportError}
-              </p>
-            )}
+            {exportError && <p className="calendar-export-error" role="alert">{exportError}</p>}
           </section>
         </aside>
       </div>
 
-      <section className="rounded-xl border bg-card p-4 sm:p-5" aria-labelledby="offline-conflicts-heading">
+      <section className="offline-conflicts surface-card" aria-labelledby="offline-conflicts-heading">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <AlertTriangle aria-hidden="true" className="size-5" />
