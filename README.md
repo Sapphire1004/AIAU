@@ -12,7 +12,7 @@ AIAU は、旅行やお出かけの相談をチャットで進めながら、AI 
 - AI が時間軸のプランを生成
 - 候補への投票、採用案の確定、変更履歴の復元
 - 確定プランと個人予定をカレンダーで一元管理
-- Realtime、Web Push、ICS export、オフライン競合解決
+- リアルタイム同期（Supabase Realtime）、Web Push、ICS出力、オフライン競合解決
 
 ## 目次
 
@@ -39,7 +39,7 @@ AIAU の体験は、3つの画面でつながっています。
 | --- | --- | --- |
 | **1. アイデアボード + チャット** | 会話から「行きたい」「やりたい」を集める | チャット、AI抽出、付箋CRUD、保留・復帰、並べ替え |
 | **2. タイムラインプラン** | アイデアを時間軸に配置し、みんなで決める | AI生成・再生成、投票、採用案確定、履歴preview・復元 |
-| **3. カレンダー** | 確定した旅行予定と個人予定をまとめる | 日・週・月・アジェンダ表示、個人予定編集、ICS export、競合解決 |
+| **3. カレンダー** | 確定した旅行予定と個人予定をまとめる | 日・週・月・アジェンダ表示、個人予定編集、ICS出力、競合解決 |
 
 ```mermaid
 flowchart LR
@@ -52,7 +52,7 @@ flowchart LR
   Personal[個人予定] --> Calendar
 ```
 
-旧UIの挙動を確認するための静的モックは [`mockups/`](mockups/) に残しています。Reactアプリの実行時データには使用されず、production bundleにも含まれません。
+PR #11時点のUI設計と操作意図を参照できるよう、静的モックを設計資料として [`mockups/`](mockups/) に残しています。Reactアプリの実行時データには使用されず、production bundleにも含まれません。
 
 ## 主な機能
 
@@ -62,7 +62,7 @@ flowchart LR
 - 旅行作成と招待リンク／トークンによる参加
 - 招待リンクから参加フォームへトークンを自動入力
 - 旅行単位のメンバー一覧とニックネーム表示
-- 旅行ごとに分離されたデータと Realtime 購読
+- 旅行ごとに分離されたデータと、Supabase Realtimeによるリアルタイム購読
 
 ### アイデアボード + チャット
 
@@ -97,15 +97,15 @@ flowchart LR
 
 ### 通知と共有
 
-- Web Push購読の登録・失効
+- Web Push購読の登録
 - 通知権限が拒否された場合の再設定案内
-- `dispatch-push`による通知レコードの直接配信
+- `dispatch-push`による通知レコードのタイトル・本文・リンクの直接配信
 - 共有トークンによる公開プラン取得
 - 通知レコードの重複防止
 
 #### Web Push直接確認
 
-Hosted Supabaseと実Edgeブラウザを使い、購読登録、`dispatch-push`の`sent=1`、Service Workerでの通知タイトル・本文受信を直接確認しています。期限リマインダーを自動実行するschedulerは未設定です。
+Hosted SupabaseとMicrosoft Edgeを使い、実環境で購読登録、`dispatch-push`の`sent=1`、Service Workerでの通知タイトル・本文受信を直接確認しています。期限リマインダーを自動実行するschedulerは未設定です。
 
 購読登録:
 
@@ -145,7 +145,7 @@ flowchart TB
   Functions --> OpenAI[OpenAI Chat Completions API]
 ```
 
-React側では、ページから直接fixtureを読み込まず、`repositories` と `services` を通してSupabaseへアクセスします。旅行、参加者、チャット、付箋、位置、プラン、候補、投票、履歴、予定、競合、通知、Push購読のsource of truthはSupabaseです。
+React側では、ページから直接fixtureを読み込まず、`repositories` と `services` を通してSupabaseへアクセスします。旅行、参加者、チャット、付箋と配置座標（x / y）、プラン、候補、投票、履歴、予定、競合、通知、Push購読のsource of truthはSupabaseです。
 
 ### Supabaseの利用範囲
 
@@ -413,7 +413,7 @@ SUPABASE_TEST_URL="$API_URL" SUPABASE_TEST_KEY="$PUBLISHABLE_KEY" npm run test:i
 ## 既知の制約
 
 - 匿名アカウントの端末間同期・復旧は未対応
-- 外部カレンダーとの双方向同期は未対応。現在はICS exportを提供
+- 外部カレンダーとの双方向同期は未対応。現在はICS出力を提供
 - Web Pushにはブラウザ権限とVAPID設定が必要
 - `dispatch-push`の直接配信は確認済みだが、期限リマインダーを自動実行するschedulerは未設定
 - OpenAI APIが未設定または失敗した場合、AI付箋・プランは生成せず画面へエラーを表示
