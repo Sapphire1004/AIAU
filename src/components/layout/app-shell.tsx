@@ -100,8 +100,8 @@ export function AppShell({ children, tripId }: { children: ReactNode; tripId?: s
     <>
       <header className="app-header">
         <Link className="brand" to="/">
-          <span className="brand-mark">A</span>
-          <span className="brand-name">AIAU</span>
+          <span className="brand-mark">旅</span>
+          <span className="brand-name">タビアミ</span>
         </Link>
         <div className="trip-switcher">
           <small>

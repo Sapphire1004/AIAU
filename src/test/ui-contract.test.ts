@@ -58,6 +58,9 @@ describe('UI route contract', () => {
     expect(matchPath({ path: '/calendar', end: true }, hrefs[3].split('?')[0])).not.toBeNull()
     expect(markup).toContain('class="app-header"')
     expect(markup).toContain('class="main-nav"')
+    expect(markup).toContain('class="brand-mark">旅</span>')
+    expect(markup).toContain('class="brand-name">タビアミ</span>')
+    expect(markup).not.toContain('AIAU')
   })
 
   it('renders repository-shaped home forms without embedding trip records', () => {
@@ -66,6 +69,7 @@ describe('UI route contract', () => {
     expect(readAttribute(markup, 'name')).toEqual(['title', 'nickname', 'startsAt', 'endsAt', 'token', 'nickname'])
     expect(markup.match(/<form/g)).toHaveLength(2)
     expect(markup).toContain('class="home-page page-shell"')
+    expect(markup).toContain('タビアミ · COLLABORATIVE TRIP PLANNER')
     expect(markup).toContain('お出かけを、みんなで組み立てる')
     expect(markup).toContain('role="status"')
     expect(markup).toContain('読み込み中')
@@ -82,9 +86,9 @@ describe('UI route contract', () => {
   })
 
   it('builds invite links that the home page can read back', () => {
-    const url = buildInviteUrl('invite token/1', 'https://aiau.example')
+    const url = buildInviteUrl('invite token/1', 'https://tabiami.example')
 
-    expect(url).toBe('https://aiau.example/?invite=invite%20token%2F1')
+    expect(url).toBe('https://tabiami.example/?invite=invite%20token%2F1')
     expect(readInviteTokenFromSearch(new URL(url).search)).toBe('invite token/1')
     expect(readInviteTokenFromSearch('')).toBeNull()
   })

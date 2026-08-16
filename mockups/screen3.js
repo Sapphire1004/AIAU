@@ -1,6 +1,6 @@
 (function () {
   const views = ["day", "week", "month", "agenda"];
-  const events = window.AIAU_DATA.calendarEvents;
+  const events = window.TABIAMI_DATA.calendarEvents;
   const detail = document.getElementById("event-detail");
 
   function showEvent(id) {

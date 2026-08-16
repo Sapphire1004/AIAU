@@ -75,7 +75,7 @@ export function HomePage() {
     <div className="home-page page-shell">
       <div className="page-title">
         <div>
-          <span className="eyebrow">AIAU · COLLABORATIVE TRIP PLANNER</span>
+          <span className="eyebrow">タビアミ · COLLABORATIVE TRIP PLANNER</span>
           <h1>お出かけを、みんなで組み立てる</h1>
           <p>チャットのアイデアを付箋に集め、プランとカレンダーへつなぎます。</p>
         </div>

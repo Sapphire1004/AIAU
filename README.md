@@ -1,4 +1,4 @@
-# AIAU
+# タビアミ
 
 [![CI](https://github.com/sora-33/AIAU/actions/workflows/ci.yml/badge.svg)](https://github.com/sora-33/AIAU/actions/workflows/ci.yml)
 
