@@ -157,7 +157,6 @@ React側では、ページから直接fixtureを読み込まず、`repositories`
 | RPC | 旅行作成・参加、AI結果適用、投票、確定、履歴復元、競合解決をtransaction実行 |
 | Realtime | messages、notes、trip_members、plan_slots、plan_options、votes、plan_versions、personal_events、offline_conflictsの変更を画面へ反映 |
 | Edge Functions | OpenAI付箋抽出・プラン生成、Web Push、ICS出力、公開プラン取得 |
-| Storage | 現在は未使用 |
 
 ### Edge Functions
 
