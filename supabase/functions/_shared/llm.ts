@@ -32,6 +32,8 @@ export async function callOpenAIJson(system: string, input: unknown): Promise<un
   const key = Deno.env.get('OPENAI_API_KEY')?.trim()
   if (!key) throw new OpenAIError('OPENAI_API_KEY_NOT_CONFIGURED', 503)
   const model = Deno.env.get('OPENAI_MODEL')?.trim() || defaultOpenAIModel
+  // gpt-5 系・o 系の reasoning モデルは temperature の指定（既定値 1 以外）を拒否する
+  const isReasoningModel = /^(gpt-5|o\d)/.test(model)
 
   let response: Response
   try {
@@ -48,8 +50,8 @@ export async function callOpenAIJson(system: string, input: unknown): Promise<un
           { role: 'user', content: JSON.stringify(input) },
         ],
         response_format: { type: 'json_object' },
-        temperature: 0,
-        max_completion_tokens: openAIMaxCompletionTokens,
+        ...(isReasoningModel ? {} : { temperature: 0 }),
+        max_completion_tokens: isReasoningModel ? 16_384 : openAIMaxCompletionTokens,
         n: 1,
         store: false,
       }),

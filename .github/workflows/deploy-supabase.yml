@@ -1,0 +1,56 @@
+# main へのマージ時に Supabase の migration / Edge Functions を Hosted へ自動反映する。
+# 背景: #24 で「マージ済み migration が Hosted に未適用」で障害になったため、
+# 人手の適用忘れを構造的に防ぐ。
+#
+# 必要な Repository Secrets（オーナーが設定するまでこのワークフローはスキップされる）:
+#   SUPABASE_ACCESS_TOKEN … Dashboard > Account > Access Tokens で発行
+#   SUPABASE_PROJECT_REF  … プロジェクトの ref（URL の <ref>.supabase.co 部分）
+#   SUPABASE_DB_PASSWORD  … プロジェクト作成時の DB パスワード
+name: Deploy Supabase
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/functions/**'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check secrets configured
+        id: check
+        env:
+          ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          if [ -z "$ACCESS_TOKEN" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::SUPABASE_ACCESS_TOKEN が未設定のためデプロイをスキップしました（Settings > Secrets で設定してください）"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: supabase/setup-cli@v1
+        if: steps.check.outputs.configured == 'true'
+        with:
+          version: latest
+
+      - name: Apply migrations
+        if: steps.check.outputs.configured == 'true'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          supabase link --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
+          supabase db push
+
+      - name: Deploy Edge Functions
+        if: steps.check.outputs.configured == 'true'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase functions deploy --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
