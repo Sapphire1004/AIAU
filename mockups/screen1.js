@@ -1,5 +1,5 @@
 (function () {
-  const data = window.AIAU_DATA;
+  const data = window.TABIAMI_DATA;
   const currentUser = data.trip.currentUser || { id: "ai", name: "あい", initials: "あ" };
   const messages = data.messages.map((message) => ({ ...message }));
   const dialog = document.getElementById("note-dialog");

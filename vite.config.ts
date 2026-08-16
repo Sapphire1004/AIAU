@@ -28,13 +28,12 @@ export default defineConfig({
         ],
       },
       manifest: {
-        name: 'AIAU',
-        short_name: 'AIAU',
-        description:
-          'チャットの内容を AI が整理し、旅行プランからカレンダーまで組み立てるプランニングアプリ',
+        name: 'タビアミ',
+        short_name: 'タビアミ',
+        description: 'タビアミは、チャットのアイデアを旅行プランとカレンダーへつなげる共同旅行プランナーです。',
         lang: 'ja',
         display: 'standalone',
-        theme_color: '#ffffff',
+        theme_color: '#2a9d8f',
         background_color: '#ffffff',
         icons: [
           {

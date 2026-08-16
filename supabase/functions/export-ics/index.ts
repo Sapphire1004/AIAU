@@ -52,13 +52,13 @@ Deno.serve(async (request) => {
       .order('start_at')
     if (eventsResult.error) throw eventsResult.error
 
-    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//AIAU//Travel Plan//JA', 'CALSCALE:GREGORIAN']
+    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//TABIAMI//Travel Plan//JA', 'CALSCALE:GREGORIAN']
     for (const slot of eventsResult.data ?? []) {
       const event = slot.plan_options
       if (!event || event.id !== slot.confirmed_option_id) continue
       const attrs = event.attrs as Record<string, unknown>
       lines.push('BEGIN:VEVENT')
-      lines.push(`UID:${event.id}@aiau`)
+      lines.push(`UID:${event.id}@tabiami`)
       lines.push(`DTSTAMP:${utcDate(new Date().toISOString())}`)
       if (event.kind === 'all_day') {
         lines.push(`DTSTART;VALUE=DATE:${dateOnly(event.start_at)}`)
@@ -79,7 +79,7 @@ Deno.serve(async (request) => {
       headers: {
         ...corsHeaders,
         'Content-Type': 'text/calendar; charset=utf-8',
-        'Content-Disposition': `attachment; filename="aiau-${body.plan_id}.ics"`,
+        'Content-Disposition': `attachment; filename="tabiami-${body.plan_id}.ics"`,
       },
     })
   } catch (error) {

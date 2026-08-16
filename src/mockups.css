@@ -539,15 +539,15 @@ dialog::backdrop { background: rgba(36,52,71,.36); }
 .calendar-fullcalendar .fc-timegrid-slot-label-cushion { color: var(--mock-muted); font-size: 9px; }
 .calendar-fullcalendar .fc-timegrid-slot { height: 3.8em; }
 .calendar-fullcalendar .fc-event { cursor: pointer; }
-.calendar-fullcalendar .aiau-calendar-event {
+.calendar-fullcalendar .tabiami-calendar-event {
   overflow: hidden;
   border-width: 1px;
   border-left-width: 4px;
   border-radius: 6px;
   box-shadow: 0 3px 9px rgba(36,52,71,.06);
 }
-.calendar-fullcalendar .aiau-calendar-event:hover,
-.calendar-fullcalendar .aiau-calendar-event.is-selected { outline: 2px solid rgba(42,157,143,.4); outline-offset: 1px; }
+.calendar-fullcalendar .tabiami-calendar-event:hover,
+.calendar-fullcalendar .tabiami-calendar-event.is-selected { outline: 2px solid rgba(42,157,143,.4); outline-offset: 1px; }
 .calendar-event-content { min-width: 0; padding: 4px 6px; color: var(--ink); line-height: 1.35; }
 .calendar-event-content .event-type { float: right; margin-left: 5px; padding: 2px 5px; border-radius: 4px; color: var(--mock-muted); background: rgba(255,255,255,.7); font-size: 8px; }
 .calendar-event-content strong { display: block; overflow: hidden; margin-bottom: 2px; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }

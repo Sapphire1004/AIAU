@@ -1,5 +1,5 @@
 (function () {
-  const data = window.AIAU_DATA;
+  const data = window.TABIAMI_DATA;
   const drawer = document.getElementById("history-drawer");
   const rows = document.getElementById("plan-rows");
   const selection = {

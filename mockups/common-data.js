@@ -1,4 +1,4 @@
-window.AIAU_DATA = {
+window.TABIAMI_DATA = {
   trip: {
     title: "週末の東京アート旅",
     dateLabel: "10月18日（土）〜 10月19日（日）",

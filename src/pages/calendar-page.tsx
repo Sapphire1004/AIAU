@@ -324,8 +324,8 @@ export function CalendarPage({ userId }: { userId: string }) {
             borderColor: isPlan ? '#e87561' : '#4e82c4',
             textColor: '#263238',
             classNames: [
-              'aiau-calendar-event',
-              isPlan ? 'aiau-plan-event' : 'aiau-personal-event',
+              'tabiami-calendar-event',
+              isPlan ? 'tabiami-plan-event' : 'tabiami-personal-event',
               ...(isSelected ? ['is-selected'] : []),
             ],
             extendedProps: {
@@ -592,7 +592,7 @@ export function CalendarPage({ userId }: { userId: string }) {
       const objectUrl = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = objectUrl
-      link.download = `aiau-${selectedExportTarget.trip.id}.ics`
+      link.download = `tabiami-${selectedExportTarget.trip.id}.ics`
       document.body.appendChild(link)
       link.click()
       link.remove()
