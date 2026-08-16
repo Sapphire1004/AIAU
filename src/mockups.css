@@ -217,8 +217,12 @@ button { cursor: pointer; }
 .row-label { display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 12px 16px; }
 .row-label strong { font-size: 12px; }
 .row-label span { color: var(--mock-muted); font-size: 10px; }
-.time-track { position: relative; display: flex; flex-direction: column; gap: 12px; padding: 12px 0; min-height: 128px; background-image: linear-gradient(to right, var(--line) 1px, transparent 1px); background-size: calc(100% / var(--timeline-hours, 10)) 100%; }
-.option-lane { display: grid; grid-template-columns: repeat(var(--timeline-columns, 40), minmax(0, 1fr)); column-gap: 6px; }
+.time-track { position: relative; display: flex; flex-direction: column; gap: 12px; padding: 26px 0 12px; min-height: 128px; background-image: linear-gradient(to right, var(--line) 1px, transparent 1px); background-size: calc(100% / var(--timeline-hours, 10)) 100%; }
+.option-lane { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(var(--timeline-columns, 40), minmax(0, 1fr)); column-gap: 6px; }
+.slot-band { position: absolute; z-index: 0; top: 4px; bottom: 6px; border: 1px dashed var(--group-accent, var(--purple)); border-radius: 10px; background: rgba(124,92,191,.05); background: color-mix(in srgb, var(--group-accent, #7c5cbf) 6%, transparent); pointer-events: none; }
+.slot-band-label { position: absolute; top: 3px; left: 9px; padding: 1px 5px; border-radius: 4px; background: rgba(255,255,255,.9); color: var(--group-accent, var(--purple)); font-size: 9px; font-weight: 800; white-space: nowrap; }
+.confirmed-band { border-style: solid; border-color: #b9dcd6; background: rgba(42,157,143,.05); }
+.confirmed-band .slot-band-label { color: var(--teal-dark); }
 .candidate-row { background: #fdfcff; }
 .confirmed-row { background: #f9fbfc; }
 .settled-row { background: #f8fcfb; }
@@ -231,8 +235,8 @@ button { cursor: pointer; }
 .suggestion-label .candidate-name { color: var(--teal-dark); }
 .candidate-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
 .candidate-actions .vote-row { margin-top: 0; }
-.schedule-block { position: relative; min-width: 0; padding: 10px 12px; border: 1px solid #f0c7bf; border-left: 4px solid var(--coral); border-radius: 8px; background: #fff4f1; box-shadow: 0 4px 10px rgba(224,118,99,.08); }
-.schedule-block.option { border-color: #d9cff0; border-left-color: var(--purple); background: #f6f2fc; }
+.schedule-block { position: relative; z-index: 1; min-width: 0; padding: 10px 12px; border: 1px solid #f0c7bf; border-left: 4px solid var(--coral); border-radius: 8px; background: #fff4f1; box-shadow: 0 4px 10px rgba(224,118,99,.08); }
+.schedule-block.option { border-color: #d9cff0; border-left-color: var(--group-accent, var(--purple)); background: #f6f2fc; }
 .schedule-block.ai-suggestion { border: 1px dashed #8ccfc2; border-left: 4px dashed var(--teal); background: #eff9f6; box-shadow: 0 4px 10px rgba(42,157,143,.08); }
 .schedule-block.draft { border-color: #b9dcd6; border-left-color: var(--teal); background: #eef8f6; }
 .schedule-block.rejected { opacity: .42; filter: grayscale(.8); }

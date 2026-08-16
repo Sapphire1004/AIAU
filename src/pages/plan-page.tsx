@@ -20,6 +20,7 @@ const EMPTY_SLOTS: PlanSlot[] = []
 const EMPTY_OPTIONS: PlanOption[] = []
 const EMPTY_VOTES: Vote[] = []
 const COLUMNS_PER_HOUR = 4
+const GROUP_ACCENTS = ['#7c5cbf', '#c2669a', '#4f86c6', '#c78a3c']
 
 export function PlanPage({ userId }: { userId: string }) {
   const { tripId = '' } = useParams()
@@ -345,7 +346,7 @@ export function PlanPage({ userId }: { userId: string }) {
           </div>
 
           <div className="timeline-guide">
-            縦軸は時間が競合した案の比較で、投票できるのは競合している案だけです。競合していない予定は上段の1行にまとめています。
+            投票できるのは時間が競合している案だけです。時間が重なっていない競合は同じ行にまとめ、囲み枠と「競合A / 競合B」のラベルでどれとどれが同じ投票の選択肢かを示します。競合していない予定は上段の1行にまとめています。
           </div>
           <div aria-label="予定の種類" className="plan-legend">
             <span className="plan-legend-item">
@@ -450,19 +451,20 @@ type TimelineRowsProps = {
 
 function TimelineRows({ slots, optionsBySlot, ...props }: TimelineRowsProps) {
   const settledOptions: PlanOption[] = []
-  const votingSlots: Array<{ slot: PlanSlot; options: PlanOption[] }> = []
+  const conflictGroups: SlotGroup[] = []
+  const confirmedGroups: SlotGroup[] = []
 
   for (const slot of slots) {
     const options = optionsBySlot.get(slot.id) ?? EMPTY_OPTIONS
-    if (slot.status === 'confirmed' || options.length > 1) {
-      votingSlots.push({ slot, options })
-      continue
-    }
-    settledOptions.push(...options)
+    if (slot.status === 'confirmed') confirmedGroups.push({ slot, options })
+    else if (options.length > 1) conflictGroups.push({ slot, options })
+    else settledOptions.push(...options)
   }
   settledOptions.sort((left, right) => timestamp(left.start_at) - timestamp(right.start_at))
+  const conflictRows = packSlotGroups(conflictGroups)
+  const confirmedRows = packSlotGroups(confirmedGroups)
 
-  if (settledOptions.length === 0 && votingSlots.length === 0) {
+  if (settledOptions.length === 0 && conflictRows.length === 0 && confirmedRows.length === 0) {
     return (
       <div className="timeline-rows">
         <section className="timeline-row">
@@ -482,11 +484,43 @@ function TimelineRows({ slots, optionsBySlot, ...props }: TimelineRowsProps) {
       {settledOptions.length > 0 && (
         <SettledRow options={settledOptions} scale={props.scale} timeZone={props.timeZone} tripId={props.tripId} />
       )}
-      {votingSlots.map(({ slot, options }) => (
-        <TimelineSlot key={slot.id} options={options} slot={slot} {...props} />
+      {conflictRows.map((groups) => (
+        <SlotRow groups={groups} key={groups[0].slot.id} variant="conflict" {...props} />
+      ))}
+      {confirmedRows.map((groups) => (
+        <SlotRow groups={groups} key={groups[0].slot.id} variant="confirmed" {...props} />
       ))}
     </div>
   )
+}
+
+type SlotGroup = {
+  slot: PlanSlot
+  options: PlanOption[]
+}
+
+/** 時間が重ならないグループは同じ行にまとめ、行数（縦の長さ）を抑える。 */
+function packSlotGroups(groups: SlotGroup[]): SlotGroup[][] {
+  const rows: SlotGroup[][] = []
+  const sorted = [...groups].sort((left, right) => groupBounds(left).start - groupBounds(right).start)
+  for (const group of sorted) {
+    const bounds = groupBounds(group)
+    const row = rows.find((entries) =>
+      entries.every((entry) => {
+        const other = groupBounds(entry)
+        return bounds.start >= other.end || other.start >= bounds.end
+      }),
+    )
+    if (row) row.push(group)
+    else rows.push([group])
+  }
+  return rows
+}
+
+function groupBounds(group: SlotGroup): { start: number; end: number } {
+  const starts = [timestamp(group.slot.start_at), ...group.options.map((option) => timestamp(option.start_at))]
+  const ends = [timestamp(group.slot.end_at), ...group.options.map((option) => timestamp(option.end_at))]
+  return { start: Math.min(...starts), end: Math.max(...ends) }
 }
 
 type SettledRowProps = {
@@ -541,14 +575,14 @@ function assignLanes(options: PlanOption[]): PlanOption[][] {
   return lanes
 }
 
-type TimelineSlotProps = Omit<TimelineRowsProps, 'slots' | 'optionsBySlot'> & {
-  slot: PlanSlot
-  options: PlanOption[]
+type SlotRowProps = Omit<TimelineRowsProps, 'slots' | 'optionsBySlot'> & {
+  groups: SlotGroup[]
+  variant: 'conflict' | 'confirmed'
 }
 
-function TimelineSlot({
-  slot,
-  options,
+function SlotRow({
+  groups,
+  variant,
   votes,
   userId,
   tripId,
@@ -558,107 +592,186 @@ function TimelineSlot({
   scale,
   onVote,
   onConfirm,
-}: TimelineSlotProps) {
-  const voteCounts = new Map(options.map((option) => [option.id, 0]))
-  for (const vote of votes) {
-    if (vote.slot_id === slot.id && voteCounts.has(vote.option_id)) {
-      voteCounts.set(vote.option_id, (voteCounts.get(vote.option_id) ?? 0) + 1)
-    }
-  }
-
-  const maximumVotes = options.length ? Math.max(...options.map((option) => voteCounts.get(option.id) ?? 0)) : 0
-  const topOptionIds = new Set(
-    maximumVotes > 0
-      ? options.filter((option) => (voteCounts.get(option.id) ?? 0) === maximumVotes).map((option) => option.id)
-      : [],
+}: SlotRowProps) {
+  const isConfirmedRow = variant === 'confirmed'
+  const laneCount = Math.max(...groups.map((group) => group.options.length), 1)
+  const lanes = Array.from({ length: laneCount }, (_, lane) =>
+    groups.flatMap((group) => {
+      const option = group.options[lane]
+      return option ? [{ group, option }] : []
+    }),
   )
-  const ownVote = votes.find((vote) => vote.slot_id === slot.id && vote.user_id === userId)
-  const ownOption = ownVote ? options.find((option) => option.id === ownVote.option_id) : undefined
-  const slotIsConfirmed = slot.status === 'confirmed'
+  const rowStart = Math.min(...groups.map((group) => groupBounds(group).start))
+  const rowEnd = Math.max(...groups.map((group) => groupBounds(group).end))
+  const optionCount = groups.reduce((total, group) => total + group.options.length, 0)
 
   return (
     <section
-      aria-label={`${formatTimeRange(slot.start_at, slot.end_at, timeZone)}の候補`}
-      className={`timeline-row ${slotIsConfirmed ? 'confirmed-row' : 'candidate-row'}`}
+      aria-label={`${formatTimeRange(toIsoString(rowStart), toIsoString(rowEnd), timeZone)}の${isConfirmedRow ? '確定した予定' : '競合候補'}`}
+      className={`timeline-row ${isConfirmedRow ? 'confirmed-row' : 'candidate-row'}`}
     >
-      <div className={`row-label ${slotIsConfirmed ? 'confirmed-label' : 'candidate-label'}`}>
-        <span className="candidate-name">{slotIsConfirmed ? '確定した予定' : '競合候補'}</span>
-        <strong>{formatTimeRange(slot.start_at, slot.end_at, timeZone)}</strong>
+      <div className={`row-label ${isConfirmedRow ? 'confirmed-label' : 'candidate-label'}`}>
+        <span className="candidate-name">{isConfirmedRow ? '確定した予定' : '競合候補'}</span>
+        <strong>{formatTimeRange(toIsoString(rowStart), toIsoString(rowEnd), timeZone)}</strong>
         <span className="candidate-meta">
-          {previewMode
-            ? '履歴プレビュー'
-            : slotIsConfirmed
-              ? '採用案を確定済み'
-              : ownOption
-                ? `「${ownOption.title}」に投票済み`
-                : `${options.length}案から投票`}
+          {isConfirmedRow
+            ? `${groups.length}件・採用案を確定済み`
+            : previewMode
+              ? `${groups.length}件の競合・履歴プレビュー`
+              : `${groups.length}件の競合・${optionCount}案から投票`}
         </span>
       </div>
       <div className="time-track">
-        {options.length === 0 ? (
-          <p className="timeline-row-empty">この時間帯には候補がありません。</p>
-        ) : (
-          options.map((option) => {
-            const count = voteCounts.get(option.id) ?? 0
-            const isTop = topOptionIds.has(option.id)
-            const tiedForTop = topOptionIds.size > 1
-            const isOwnVote = ownOption?.id === option.id
-            const isConfirmedOption = slot.confirmed_option_id === option.id
-            const isNotSelected = slotIsConfirmed && !isConfirmedOption
-
-            return (
-              <div className="option-lane" key={option.id}>
-                <ScheduleBlock
-                  option={option}
-                  originLabel={isConfirmedOption ? '採用済み' : `${kindLabel(option.kind)}候補`}
-                  rejected={isNotSelected}
-                  scale={scale}
-                  timeZone={timeZone}
-                  tripId={tripId}
-                  variant={isConfirmedOption ? 'draft' : 'option'}
-                >
-                  {previewMode ? (
-                    <span className="schedule-reason">履歴には投票数が保存されていません</span>
-                  ) : slotIsConfirmed ? (
-                    <span className="schedule-reason">
-                      {isConfirmedOption ? 'この案が採用されています' : '別の案が採用されています'}
-                    </span>
-                  ) : (
-                    <div className="vote-row">
-                      <button
-                        aria-pressed={isOwnVote}
-                        className={`vote-button${isOwnVote ? ' voted' : ''}`}
-                        disabled={Boolean(actionKey) || isOwnVote}
-                        onClick={() => onVote(slot.id, option.id)}
-                        type="button"
-                      >
-                        {actionKey === `vote:${option.id}` ? '投票中…' : isOwnVote ? '投票済み' : 'この案に投票'}
-                      </button>
-                      <span className="vote-count">{count}票</span>
-                      {isTop && (
-                        <button
-                          className="adopt-button"
-                          disabled={Boolean(actionKey)}
-                          onClick={() => onConfirm(slot.id, option.id)}
-                          type="button"
-                        >
-                          {actionKey === `confirm:${option.id}`
-                            ? '確定中…'
-                            : tiedForTop
-                              ? '同率最多から採用'
-                              : '最多票案を採用'}
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </ScheduleBlock>
-              </div>
-            )
-          })
-        )}
+        {groups.map((group, groupIndex) => {
+          const bounds = groupBounds(group)
+          return (
+            <div
+              className={`slot-band ${isConfirmedRow ? 'confirmed-band' : 'conflict-band'}`}
+              key={group.slot.id}
+              style={{ ...timelineSpanStyle(bounds, scale), '--group-accent': groupAccent(groupIndex) } as CSSProperties}
+            >
+              <span className="slot-band-label">
+                {isConfirmedRow ? '確定' : `競合${groupLabel(groupIndex)}`}
+                {' '}
+                {formatTimeRange(group.slot.start_at, group.slot.end_at, timeZone)}
+                {isConfirmedRow ? '' : ` ・ ${group.options.length}案から1つ`}
+              </span>
+            </div>
+          )
+        })}
+        {lanes.map((lane, laneIndex) => (
+          <div className="option-lane" key={lane[0]?.option.id ?? laneIndex}>
+            {lane.map(({ group, option }) => (
+              <SlotOptionBlock
+                actionKey={actionKey}
+                groupIndex={groups.indexOf(group)}
+                key={option.id}
+                lane={laneIndex}
+                onConfirm={onConfirm}
+                onVote={onVote}
+                option={option}
+                previewMode={previewMode}
+                scale={scale}
+                slotGroup={group}
+                timeZone={timeZone}
+                tripId={tripId}
+                userId={userId}
+                votes={votes}
+              />
+            ))}
+          </div>
+        ))}
+        {optionCount === 0 && <p className="timeline-row-empty">この時間帯には候補がありません。</p>}
       </div>
     </section>
   )
+}
+
+type SlotOptionBlockProps = {
+  slotGroup: SlotGroup
+  option: PlanOption
+  groupIndex: number
+  lane: number
+  votes: Vote[]
+  userId: string
+  tripId: string
+  timeZone: string
+  actionKey: string | null
+  previewMode: boolean
+  scale: TimelineScale
+  onVote: (slotId: string, optionId: string) => void
+  onConfirm: (slotId: string, optionId: string) => void
+}
+
+function SlotOptionBlock({
+  slotGroup,
+  option,
+  groupIndex,
+  lane,
+  votes,
+  userId,
+  tripId,
+  timeZone,
+  actionKey,
+  previewMode,
+  scale,
+  onVote,
+  onConfirm,
+}: SlotOptionBlockProps) {
+  const { slot, options } = slotGroup
+  const slotVotes = votes.filter((vote) => vote.slot_id === slot.id)
+  const countFor = (optionId: string) => slotVotes.filter((vote) => vote.option_id === optionId).length
+  const maximumVotes = Math.max(0, ...options.map((entry) => countFor(entry.id)))
+  const topOptionIds = new Set(
+    maximumVotes > 0 ? options.filter((entry) => countFor(entry.id) === maximumVotes).map((entry) => entry.id) : [],
+  )
+  const ownVote = slotVotes.find((vote) => vote.user_id === userId)
+  const ownOption = ownVote ? options.find((entry) => entry.id === ownVote.option_id) : undefined
+
+  const slotIsConfirmed = slot.status === 'confirmed'
+  const isConfirmedOption = slot.confirmed_option_id === option.id
+  const count = countFor(option.id)
+  const isOwnVote = ownOption?.id === option.id
+  const isTop = topOptionIds.has(option.id)
+  const tiedForTop = topOptionIds.size > 1
+
+  return (
+    <ScheduleBlock
+      accent={groupAccent(groupIndex)}
+      option={option}
+      originLabel={
+        slotIsConfirmed
+          ? isConfirmedOption
+            ? '採用済み'
+            : '不採用'
+          : `競合${groupLabel(groupIndex)}の候補 ${lane + 1}/${options.length}`
+      }
+      rejected={slotIsConfirmed && !isConfirmedOption}
+      scale={scale}
+      timeZone={timeZone}
+      tripId={tripId}
+      variant={isConfirmedOption ? 'draft' : 'option'}
+    >
+      {previewMode ? (
+        <span className="schedule-reason">履歴には投票数が保存されていません</span>
+      ) : slotIsConfirmed ? (
+        <span className="schedule-reason">
+          {isConfirmedOption ? 'この案が採用されています' : '別の案が採用されています'}
+        </span>
+      ) : (
+        <div className="vote-row">
+          <button
+            aria-pressed={isOwnVote}
+            className={`vote-button${isOwnVote ? ' voted' : ''}`}
+            disabled={Boolean(actionKey) || isOwnVote}
+            onClick={() => onVote(slot.id, option.id)}
+            type="button"
+          >
+            {actionKey === `vote:${option.id}` ? '投票中…' : isOwnVote ? '投票済み' : 'この案に投票'}
+          </button>
+          <span className="vote-count">{count}票</span>
+          {isTop && (
+            <button
+              className="adopt-button"
+              disabled={Boolean(actionKey)}
+              onClick={() => onConfirm(slot.id, option.id)}
+              type="button"
+            >
+              {actionKey === `confirm:${option.id}` ? '確定中…' : tiedForTop ? '同率最多から採用' : '最多票案を採用'}
+            </button>
+          )}
+        </div>
+      )}
+    </ScheduleBlock>
+  )
+}
+
+function groupLabel(index: number): string {
+  return String.fromCharCode('A'.charCodeAt(0) + (index % 26))
+}
+
+function groupAccent(index: number): string {
+  return GROUP_ACCENTS[index % GROUP_ACCENTS.length]
 }
 
 type ScheduleBlockProps = {
@@ -668,6 +781,7 @@ type ScheduleBlockProps = {
   tripId: string
   variant: 'option' | 'ai-suggestion' | 'draft'
   originLabel: string
+  accent?: string
   rejected?: boolean
   children?: ReactNode
 }
@@ -679,6 +793,7 @@ function ScheduleBlock({
   tripId,
   variant,
   originLabel,
+  accent,
   rejected = false,
   children,
 }: ScheduleBlockProps) {
@@ -687,7 +802,7 @@ function ScheduleBlock({
   return (
     <article
       className={`schedule-block ${variant}${rejected ? ' rejected' : ''}`}
-      style={{ gridColumn: timelineGridColumn(option, scale) }}
+      style={{ gridColumn: timelineGridColumn(option, scale), '--group-accent': accent } as CSSProperties}
     >
       <span className="schedule-origin">{originLabel}</span>
       <h3 className="schedule-title">{option.title}</h3>
@@ -1073,6 +1188,17 @@ function timelineGridColumn(option: PlanOption, scale: TimelineScale): string {
   const startColumn = clamp(Math.floor((optionStart - scale.start) / columnDuration), 0, columns - 1)
   const endColumn = clamp(Math.ceil((optionEnd - scale.start) / columnDuration), startColumn + 1, columns)
   return `${startColumn + 1} / span ${endColumn - startColumn}`
+}
+
+function timelineSpanStyle(bounds: { start: number; end: number }, scale: TimelineScale): CSSProperties {
+  const duration = Math.max(1, scale.end - scale.start)
+  const left = clamp(((bounds.start - scale.start) / duration) * 100, 0, 100)
+  const width = clamp(((bounds.end - bounds.start) / duration) * 100, 1, 100 - left)
+  return { left: `${left}%`, width: `${width}%` }
+}
+
+function toIsoString(value: number): string {
+  return new Date(value).toISOString()
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {
