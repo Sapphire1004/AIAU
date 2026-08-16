@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react'
 import { Check, Eye, History, LoaderCircle, RotateCcw, Sparkles, X } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import { ErrorState, LoadingState } from '@/components/layout/states'
@@ -19,6 +19,7 @@ import type { PlanOption, PlanSlot, PlanSnapshot, PlanVersion, Trip, Vote } from
 const EMPTY_SLOTS: PlanSlot[] = []
 const EMPTY_OPTIONS: PlanOption[] = []
 const EMPTY_VOTES: Vote[] = []
+const COLUMNS_PER_HOUR = 4
 
 export function PlanPage({ userId }: { userId: string }) {
   const { tripId = '' } = useParams()
@@ -344,14 +345,14 @@ export function PlanPage({ userId }: { userId: string }) {
           </div>
 
           <div className="timeline-guide">
-            縦軸は案ごとの比較です。チャット由来の競合候補と、AIが空き時間に提案した予定を分けて表示しています。
+            縦軸は時間が競合した案の比較で、投票できるのは競合している案だけです。競合していない予定は上段の1行にまとめています。
           </div>
           <div aria-label="予定の種類" className="plan-legend">
             <span className="plan-legend-item">
               <i className="plan-legend-swatch conflict" />競合候補 / 投票中
             </span>
             <span className="plan-legend-item">
-              <i className="plan-legend-swatch ai" />AI提案 / 空き時間
+              <i className="plan-legend-swatch ai" />競合なし / AI提案
             </span>
           </div>
 
@@ -363,7 +364,7 @@ export function PlanPage({ userId }: { userId: string }) {
             </div>
           ) : (
             <div className="timeline-scroll">
-              <div className="timeline">
+              <div className="timeline" style={timelineGridStyle(timelineScale)}>
                 <div className="timeline-head">
                   <div className="timeline-label">時間 / 案の比較</div>
                   <div
@@ -448,13 +449,96 @@ type TimelineRowsProps = {
 }
 
 function TimelineRows({ slots, optionsBySlot, ...props }: TimelineRowsProps) {
+  const settledOptions: PlanOption[] = []
+  const votingSlots: Array<{ slot: PlanSlot; options: PlanOption[] }> = []
+
+  for (const slot of slots) {
+    const options = optionsBySlot.get(slot.id) ?? EMPTY_OPTIONS
+    if (slot.status === 'confirmed' || options.length > 1) {
+      votingSlots.push({ slot, options })
+      continue
+    }
+    settledOptions.push(...options)
+  }
+  settledOptions.sort((left, right) => timestamp(left.start_at) - timestamp(right.start_at))
+
+  if (settledOptions.length === 0 && votingSlots.length === 0) {
+    return (
+      <div className="timeline-rows">
+        <section className="timeline-row">
+          <div className="row-label">
+            <span className="candidate-name">候補なし</span>
+          </div>
+          <div className="time-track">
+            <p className="timeline-row-empty">この日には候補がありません。</p>
+          </div>
+        </section>
+      </div>
+    )
+  }
+
   return (
     <div className="timeline-rows">
-      {slots.map((slot) => (
-        <TimelineSlot key={slot.id} options={optionsBySlot.get(slot.id) ?? EMPTY_OPTIONS} slot={slot} {...props} />
+      {settledOptions.length > 0 && (
+        <SettledRow options={settledOptions} scale={props.scale} timeZone={props.timeZone} tripId={props.tripId} />
+      )}
+      {votingSlots.map(({ slot, options }) => (
+        <TimelineSlot key={slot.id} options={options} slot={slot} {...props} />
       ))}
     </div>
   )
+}
+
+type SettledRowProps = {
+  options: PlanOption[]
+  scale: TimelineScale
+  timeZone: string
+  tripId: string
+}
+
+function SettledRow({ options, scale, timeZone, tripId }: SettledRowProps) {
+  const start = options[0].start_at
+  const end = options.reduce(
+    (latest, option) => (timestamp(option.end_at) > timestamp(latest) ? option.end_at : latest),
+    options[0].end_at,
+  )
+
+  return (
+    <section aria-label="競合していない予定" className="timeline-row settled-row">
+      <div className="row-label settled-label">
+        <span className="candidate-name">競合なしの予定</span>
+        <strong>{formatTimeRange(start, end, timeZone)}</strong>
+        <span className="candidate-meta">{options.length}件・投票せずにそのまま反映</span>
+      </div>
+      <div className="time-track">
+        {assignLanes(options).map((lane) => (
+          <div className="option-lane" key={lane[0].id}>
+            {lane.map((option) => (
+              <ScheduleBlock
+                key={option.id}
+                option={option}
+                originLabel={option.note_id ? `${kindLabel(option.kind)}の予定` : 'AIが空き時間に提案'}
+                scale={scale}
+                timeZone={timeZone}
+                tripId={tripId}
+                variant="ai-suggestion"
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function assignLanes(options: PlanOption[]): PlanOption[][] {
+  const lanes: PlanOption[][] = []
+  for (const option of options) {
+    const lane = lanes.find((entries) => timestamp(entries[entries.length - 1].end_at) <= timestamp(option.start_at))
+    if (lane) lane.push(option)
+    else lanes.push([option])
+  }
+  return lanes
 }
 
 type TimelineSlotProps = Omit<TimelineRowsProps, 'slots' | 'optionsBySlot'> & {
@@ -491,18 +575,14 @@ function TimelineSlot({
   const ownVote = votes.find((vote) => vote.slot_id === slot.id && vote.user_id === userId)
   const ownOption = ownVote ? options.find((option) => option.id === ownVote.option_id) : undefined
   const slotIsConfirmed = slot.status === 'confirmed'
-  const rowHeight = Math.max(150, options.length * 126 + 20)
 
   return (
     <section
       aria-label={`${formatTimeRange(slot.start_at, slot.end_at, timeZone)}の候補`}
-      className={`timeline-row ${options.length > 1 ? 'candidate-row' : 'suggestion-row'}`}
-      style={{ minHeight: rowHeight }}
+      className={`timeline-row ${slotIsConfirmed ? 'confirmed-row' : 'candidate-row'}`}
     >
-      <div className={`row-label ${options.length > 1 ? 'candidate-label' : 'suggestion-label'}`}>
-        <span className="candidate-name">
-          {slotIsConfirmed ? '確定した予定' : options.length > 1 ? '競合候補' : 'AI提案'}
-        </span>
+      <div className={`row-label ${slotIsConfirmed ? 'confirmed-label' : 'candidate-label'}`}>
+        <span className="candidate-name">{slotIsConfirmed ? '確定した予定' : '競合候補'}</span>
         <strong>{formatTimeRange(slot.start_at, slot.end_at, timeZone)}</strong>
         <span className="candidate-meta">
           {previewMode
@@ -514,89 +594,115 @@ function TimelineSlot({
                 : `${options.length}案から投票`}
         </span>
       </div>
-      <div className="time-track" style={{ minHeight: rowHeight }}>
+      <div className="time-track">
         {options.length === 0 ? (
           <p className="timeline-row-empty">この時間帯には候補がありません。</p>
         ) : (
-          options.map((option, index) => {
+          options.map((option) => {
             const count = voteCounts.get(option.id) ?? 0
             const isTop = topOptionIds.has(option.id)
             const tiedForTop = topOptionIds.size > 1
             const isOwnVote = ownOption?.id === option.id
             const isConfirmedOption = slot.confirmed_option_id === option.id
             const isNotSelected = slotIsConfirmed && !isConfirmedOption
-            const metadata = optionMetadata(option)
-            const position = timelinePosition(option, scale)
-            const visualClass = isConfirmedOption
-              ? 'draft'
-              : options.length > 1
-                ? 'option'
-                : 'ai-suggestion'
 
             return (
-              <article
-                className={`schedule-block ${visualClass}${isNotSelected ? ' rejected' : ''}`}
-                key={option.id}
-                style={{ left: position.left, top: 12 + index * 126, width: position.width }}
-              >
-                <span className="schedule-origin">
-                  {isConfirmedOption
-                    ? '採用済み'
-                    : options.length > 1
-                      ? `${kindLabel(option.kind)}候補`
-                      : 'AIが空き時間に提案'}
-                </span>
-                <h3 className="schedule-title">{option.title}</h3>
-                <p className="schedule-meta">
-                  {option.kind === 'all_day' ? '終日予定' : formatTimeRange(option.start_at, option.end_at, timeZone)}
-                  {metadata[0] ? ` · ${metadata[0].value}` : ''}
-                </p>
-                {option.reason && <span className="schedule-reason">{option.reason}</span>}
-                {option.note_id && (
-                  <Link className="schedule-note" to={`/trips/${tripId}/ideas#${encodeURIComponent(option.note_id)}`}>
-                    元の付箋を見る ↗
-                  </Link>
-                )}
-                {previewMode ? (
-                  <span className="schedule-reason">履歴には投票数が保存されていません</span>
-                ) : slotIsConfirmed ? (
-                  <span className="schedule-reason">
-                    {isConfirmedOption ? 'この案が採用されています' : '別の案が採用されています'}
-                  </span>
-                ) : (
-                  <div className="vote-row">
-                    <button
-                      aria-pressed={isOwnVote}
-                      className={`vote-button${isOwnVote ? ' voted' : ''}`}
-                      disabled={Boolean(actionKey) || isOwnVote}
-                      onClick={() => onVote(slot.id, option.id)}
-                      type="button"
-                    >
-                      {actionKey === `vote:${option.id}` ? '投票中…' : isOwnVote ? '投票済み' : 'この案に投票'}
-                    </button>
-                    <span className="vote-count">{count}票</span>
-                    {isTop && (
+              <div className="option-lane" key={option.id}>
+                <ScheduleBlock
+                  option={option}
+                  originLabel={isConfirmedOption ? '採用済み' : `${kindLabel(option.kind)}候補`}
+                  rejected={isNotSelected}
+                  scale={scale}
+                  timeZone={timeZone}
+                  tripId={tripId}
+                  variant={isConfirmedOption ? 'draft' : 'option'}
+                >
+                  {previewMode ? (
+                    <span className="schedule-reason">履歴には投票数が保存されていません</span>
+                  ) : slotIsConfirmed ? (
+                    <span className="schedule-reason">
+                      {isConfirmedOption ? 'この案が採用されています' : '別の案が採用されています'}
+                    </span>
+                  ) : (
+                    <div className="vote-row">
                       <button
-                        className="adopt-button"
-                        disabled={Boolean(actionKey)}
-                        onClick={() => onConfirm(slot.id, option.id)}
+                        aria-pressed={isOwnVote}
+                        className={`vote-button${isOwnVote ? ' voted' : ''}`}
+                        disabled={Boolean(actionKey) || isOwnVote}
+                        onClick={() => onVote(slot.id, option.id)}
                         type="button"
                       >
-                        {actionKey === `confirm:${option.id}`
-                          ? '確定中…'
-                          : tiedForTop
-                            ? '同率最多から採用'
-                            : '最多票案を採用'}
+                        {actionKey === `vote:${option.id}` ? '投票中…' : isOwnVote ? '投票済み' : 'この案に投票'}
                       </button>
-                    )}
-                  </div>
-                )}
-              </article>
+                      <span className="vote-count">{count}票</span>
+                      {isTop && (
+                        <button
+                          className="adopt-button"
+                          disabled={Boolean(actionKey)}
+                          onClick={() => onConfirm(slot.id, option.id)}
+                          type="button"
+                        >
+                          {actionKey === `confirm:${option.id}`
+                            ? '確定中…'
+                            : tiedForTop
+                              ? '同率最多から採用'
+                              : '最多票案を採用'}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </ScheduleBlock>
+              </div>
             )
           })
         )}
       </div>
     </section>
+  )
+}
+
+type ScheduleBlockProps = {
+  option: PlanOption
+  scale: TimelineScale
+  timeZone: string
+  tripId: string
+  variant: 'option' | 'ai-suggestion' | 'draft'
+  originLabel: string
+  rejected?: boolean
+  children?: ReactNode
+}
+
+function ScheduleBlock({
+  option,
+  scale,
+  timeZone,
+  tripId,
+  variant,
+  originLabel,
+  rejected = false,
+  children,
+}: ScheduleBlockProps) {
+  const metadata = optionMetadata(option)
+
+  return (
+    <article
+      className={`schedule-block ${variant}${rejected ? ' rejected' : ''}`}
+      style={{ gridColumn: timelineGridColumn(option, scale) }}
+    >
+      <span className="schedule-origin">{originLabel}</span>
+      <h3 className="schedule-title">{option.title}</h3>
+      <p className="schedule-meta">
+        {option.kind === 'all_day' ? '終日予定' : formatTimeRange(option.start_at, option.end_at, timeZone)}
+        {metadata[0] ? ` · ${metadata[0].value}` : ''}
+      </p>
+      {option.reason && <span className="schedule-reason">{option.reason}</span>}
+      {option.note_id && (
+        <Link className="schedule-note" to={`/trips/${tripId}/ideas#${encodeURIComponent(option.note_id)}`}>
+          元の付箋を見る ↗
+        </Link>
+      )}
+      {children}
+    </article>
   )
 }
 
@@ -950,16 +1056,27 @@ function createTimelineScale(slots: PlanSlot[], options: PlanOption[], _timeZone
   }
 }
 
-function timelinePosition(option: PlanOption, scale: TimelineScale) {
-  if (option.kind === 'all_day') return { left: '0%', width: '100%' }
-  const duration = Math.max(1, scale.end - scale.start)
+function timelineGridStyle(scale: TimelineScale): CSSProperties {
+  return {
+    '--timeline-hours': scale.hours.length,
+    '--timeline-columns': scale.hours.length * COLUMNS_PER_HOUR,
+  } as CSSProperties
+}
+
+function timelineGridColumn(option: PlanOption, scale: TimelineScale): string {
+  const columns = scale.hours.length * COLUMNS_PER_HOUR
+  if (option.kind === 'all_day') return `1 / span ${columns}`
+  const columnDuration = (60 / COLUMNS_PER_HOUR) * 60 * 1000
   const optionStart = timestamp(option.start_at)
   const optionEnd = timestamp(option.end_at)
-  if (!Number.isFinite(optionStart) || !Number.isFinite(optionEnd)) return { left: '0%', width: '20%' }
-  const left = Math.min(100, Math.max(0, ((optionStart - scale.start) / duration) * 100))
-  const available = Math.max(0, 100 - left)
-  const width = Math.min(available, Math.max(8, ((optionEnd - optionStart) / duration) * 100))
-  return { left: `${left}%`, width: `${width}%` }
+  if (!Number.isFinite(optionStart) || !Number.isFinite(optionEnd)) return `1 / span ${COLUMNS_PER_HOUR}`
+  const startColumn = clamp(Math.floor((optionStart - scale.start) / columnDuration), 0, columns - 1)
+  const endColumn = clamp(Math.ceil((optionEnd - scale.start) / columnDuration), startColumn + 1, columns)
+  return `${startColumn + 1} / span ${endColumn - startColumn}`
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value))
 }
 
 function formatHourLabel(value: number, timeZone: string): string {
