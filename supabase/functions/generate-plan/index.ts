@@ -1,5 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { z } from 'npm:zod@4.4.3'
+import { mergeOverlappingSlots } from '../_shared/conflicts.ts'
 import { corsHeaders, errorResponse, jsonResponse } from '../_shared/http.ts'
 import { callOpenAIJson, OpenAIError, sha256 } from '../_shared/llm.ts'
 import { generatedPlan } from '../_shared/schemas.ts'
@@ -106,6 +107,8 @@ Deno.serve(async (request) => {
       'Honor duration and time_hint from each note attrs, including exact requested clock times.',
       'Include at least one option in every slot. Respect the trip start, trip end, timezone, budget, and every busy interval.',
       'Do not overlap slots or busy intervals. Ensure every end_at is after start_at.',
+      'When ideas compete for the same time range, return them as multiple options inside one slot so members can vote, never as separate slots.',
+      'Notes that cannot all happen belong in one slot as competing options, for example several lunch wishes such as curry and yakiniku, or a food wish and a named restaurant serving that food.',
     ].join(' ')
     let parsed: z.infer<typeof generatedPlan>
     try {
@@ -128,13 +131,16 @@ Deno.serve(async (request) => {
       }
     }
 
+    // OpenAIが重なる予定を別slotへ返した場合も、同じ時間帯は1slotへまとめて投票できる競合候補にする。
+    const slots = mergeOverlappingSlots(parsed.slots)
+
     const applied = await client.rpc('apply_plan_command', {
       p_plan_id: body.plan_id,
       p_expected_version: body.expected_version,
       p_command: {
         type: 'replace_plan',
         summary: body.regenerate ? 'AIでプランを再生成' : 'AIでプランを生成',
-        payload: { slots: parsed.slots, regenerate: body.regenerate },
+        payload: { slots, regenerate: body.regenerate },
       },
     })
     if (applied.error) throw applied.error

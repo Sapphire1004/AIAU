@@ -60,6 +60,13 @@ export async function castVote(slotId: string, optionId: string): Promise<Json> 
   return requireData(data, 'Vote did not return totals')
 }
 
+/** 競合グループがslotをまたぐ場合に、同じグループの別slotへ入れた自分の票を取り消す。 */
+export async function retractVotes(slotIds: string[], userId: string): Promise<void> {
+  if (slotIds.length === 0) return
+  const { error } = await getSupabase().from('votes').delete().in('slot_id', slotIds).eq('user_id', userId)
+  throwIfError(error)
+}
+
 export async function confirmOption(
   slotId: string,
   optionId: string,
