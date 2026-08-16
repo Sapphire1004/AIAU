@@ -12,7 +12,7 @@ AIAU は、旅行やお出かけの相談をチャットで進めながら、AI 
 - AI が時間軸のプランを生成
 - 候補への投票、採用案の確定、変更履歴の復元
 - 確定プランと個人予定をカレンダーで一元管理
-- リアルタイム同期（Supabase Realtime）、Web Push、ICS出力、同時更新競合の検出・解決
+- リアルタイム同期（Supabase Realtime）、ICS出力、同時更新競合の検出・解決
 
 ## 目次
 
@@ -95,25 +95,9 @@ PR #11時点のUI設計と操作意図を参照できるよう、静的モック
 - 個人予定の同時更新競合を検出し、ローカル版／サーバー版から残す内容を選択
 - PWAキャッシュを利用したカレンダーフィードの耐障害性
 
-### 通知と共有
+### 共有
 
-- Web Push購読の登録
-- 通知権限が拒否された場合の再設定案内
-- `dispatch-push`による通知レコードのタイトル・本文・リンクの直接配信
 - 共有トークンによる公開プラン取得API（フロントエンドUIは未実装）
-- 通知レコードの重複防止
-
-#### Web Push直接確認
-
-Hosted SupabaseとMicrosoft Edgeを使い、実環境で購読登録、`dispatch-push`の`sent=1`、Service Workerでの通知タイトル・本文受信を直接確認しています。期限リマインダーを自動実行するスケジューラーは未設定です。
-
-購読登録:
-
-![Web Push購読登録](docs/screenshots/web-push-subscription.png)
-
-通知受信:
-
-![Web Push通知受信](docs/screenshots/web-push-delivery.png)
 
 ## アーキテクチャ
 
@@ -145,18 +129,18 @@ flowchart TB
   Functions --> OpenAI[OpenAI Chat Completions API]
 ```
 
-React側では、ページから直接fixtureを読み込まず、`repositories` と `services` を通してSupabaseへアクセスします。旅行、参加者、チャット、付箋と配置座標（x / y）、プラン、候補、投票、履歴、予定、競合、通知、Push購読のsource of truthはSupabaseです。
+React側では、ページから直接fixtureを読み込まず、`repositories` と `services` を通してSupabaseへアクセスします。旅行、参加者、チャット、付箋と配置座標（x / y）、プラン、候補、投票、履歴、予定、競合のsource of truthはSupabaseです。
 
 ### Supabaseの利用範囲
 
 | 機能 | 利用箇所 |
 | --- | --- |
 | Auth | Anonymous Sign-Inと`auth.uid()`によるユーザー識別 |
-| Database / PostgreSQL | 旅行、メンバー、チャット、付箋、プラン、個人予定、通知、履歴の永続化 |
+| Database / PostgreSQL | 旅行、メンバー、チャット、付箋、プラン、個人予定、履歴の永続化 |
 | PostgREST | Repository層から単一テーブルをCRUD |
 | RPC | 旅行作成・参加、AI結果適用、投票、確定、履歴復元、競合解決をtransaction実行 |
 | Realtime | messages、notes、trip_members、plan_slots、plan_options、votes、plan_versions、personal_events、offline_conflictsの変更を画面へ反映 |
-| Edge Functions | OpenAI付箋抽出・プラン生成、Web Push、ICS出力、公開プラン取得 |
+| Edge Functions | OpenAI付箋抽出・プラン生成、ICS出力、公開プラン取得 |
 
 ### Edge Functions
 
@@ -166,7 +150,6 @@ React側では、ページから直接fixtureを読み込まず、`repositories`
 | `generate-plan` | 付箋、旅行期間、個人予定を考慮してタイムラインを生成 |
 | `export-ics` | 確定済みプランをICSとして出力 |
 | `public-plan` | 共有トークンを検証し、公開可能なプランだけを返す |
-| `dispatch-push` | `notification_id`を受け取り、対象ユーザーの購読へWeb Pushを送信 |
 
 `OPENAI_API_KEY`が未設定・無効、またはOpenAI APIが失敗した場合、`extract-notes`と`generate-plan`はAI結果を生成・適用せず、runをfailedにして画面へ明示的なエラーを返します。既存の付箋とプランは変更しません。
 
@@ -179,7 +162,7 @@ React側では、ページから直接fixtureを読み込まず、`repositories`
 | Calendar | FullCalendar 6 |
 | Backend | Supabase Auth、PostgreSQL、PostgREST、RPC、Realtime、Edge Functions |
 | Validation | Zod 4、PostgreSQL制約、RLS |
-| PWA | vite-plugin-pwa、Workbox、Web Push |
+| PWA | vite-plugin-pwa、Workbox |
 | Test | Vitest、pgTAP、Supabase Integration Test |
 | CI | GitHub Actions、Node.js 24 |
 
@@ -230,15 +213,11 @@ cp .env.example .env.local
 ```dotenv
 VITE_SUPABASE_URL=http://127.0.0.1:54321
 VITE_SUPABASE_PUBLISHABLE_KEY=<local publishable key>
-VITE_VAPID_PUBLIC_KEY=
 OPENAI_API_KEY=<OpenAI API key>
 OPENAI_MODEL=gpt-4o-mini
-VAPID_PUBLIC_KEY=
-VAPID_PRIVATE_KEY=
-VAPID_SUBJECT=
 ```
 
-Viteがブラウザへ公開するのは`VITE_`で始まる変数だけです。`OPENAI_API_KEY`と`VAPID_PRIVATE_KEY`はFrontend bundleへ含まれません。`.env.local`や秘密鍵をcommitしないでください。
+Viteがブラウザへ公開するのは`VITE_`で始まる変数だけです。`OPENAI_API_KEY`はFrontend bundleへ含まれません。`.env.local`や秘密鍵をcommitしないでください。
 
 ### 4. Edge Functionsを起動
 
@@ -274,7 +253,6 @@ npm run supabase:stop
 | --- | --- | --- |
 | `VITE_SUPABASE_URL` | Yes | Supabase Project URL |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | Yes | ブラウザ向けPublishable Key |
-| `VITE_VAPID_PUBLIC_KEY` | Web Push使用時 | Push購読に使うVAPID公開鍵 |
 
 ### Edge Functions Secrets
 
@@ -282,13 +260,8 @@ npm run supabase:stop
 | --- | --- | --- |
 | `OPENAI_API_KEY` | AI使用時 | OpenAI API認証キー |
 | `OPENAI_MODEL` | No | 呼び出すモデル。既定値は`gpt-4o-mini` |
-| `VAPID_PUBLIC_KEY` | Web Push使用時 | VAPID公開鍵。`VITE_VAPID_PUBLIC_KEY`と同じ値 |
-| `VAPID_PRIVATE_KEY` | Web Push使用時 | VAPID秘密鍵。Edge Functionsだけで利用 |
-| `VAPID_SUBJECT` | Web Push使用時 | 送信者の連絡先を示す`mailto:`またはHTTPS URI |
 
-VAPIDはWeb Pushの送信元を証明する公開鍵・秘密鍵の組です。Web Pushを使わない場合、VAPID変数は空欄のままで構いません。
-
-Hosted Supabaseでは、DashboardでAnonymous Sign-Insを有効化し、`npx supabase secrets set --env-file .env.local --project-ref <project-ref>`でEdge Function Secretsを設定します。Clientへ渡すのはProject URL、Publishable Key、VAPID公開鍵だけです。Service Role Key、OpenAI API Key、VAPID Private KeyをFrontendへ配置してはいけません。
+Hosted Supabaseでは、DashboardでAnonymous Sign-Insを有効化し、`npx supabase secrets set --env-file .env.local --project-ref <project-ref>`でEdge Function Secretsを設定します。Clientへ渡すのはProject URLとPublishable Keyだけです。Service Role KeyとOpenAI API KeyをFrontendへ配置してはいけません。
 
 ## コマンド
 
@@ -318,7 +291,7 @@ AIAU/
 │  ├─ hooks/             # 匿名session bootstrap
 │  ├─ pages/             # Home / Ideas / Plan / Calendar
 │  ├─ repositories/      # Supabase table・RPC・Realtime access
-│  ├─ services/          # AI、Push、offline queue（未配線）
+│  ├─ services/          # AI、offline queue（未配線）
 │  ├─ test/              # UI contract / Supabase integration
 │  └─ types/             # Supabase生成型とdomain alias
 ├─ supabase/
@@ -338,7 +311,7 @@ AIAU/
 - **Anonymous Auth**: ユーザーIDはSupabase Authから取得し、Client入力を信用しない
 - **RPC境界**: 旅行作成、参加、投票、確定、履歴復元、競合解決をDB側で検証
 - **Token**: invite/share tokenは生値をDB保存せず、SHA-256 hashを保存
-- **Secret分離**: Service Role Key、OpenAI API Key、VAPID Private KeyはEdge Functionsだけで利用
+- **Secret分離**: Service Role KeyとOpenAI API KeyはEdge Functionsだけで利用
 - **AI制約**: AIは付箋を削除できず、ユーザー編集済み付箋を自動上書きしない
 - **履歴**: plan snapshotを追記し、復元も新しいversionとして記録
 - **競合**: revisionとexpected versionで同時更新を検出
@@ -413,11 +386,8 @@ SUPABASE_TEST_URL="$API_URL" SUPABASE_TEST_KEY="$PUBLISHABLE_KEY" npm run test:i
 
 - 匿名アカウントの端末間同期・復旧は未対応
 - 外部カレンダーとの双方向同期は未対応。現在はICS出力を提供
-- Web Pushにはブラウザ権限とVAPID設定が必要
-- `dispatch-push`の直接配信は確認済みだが、期限リマインダーを自動実行するスケジューラーは未設定
 - オフライン編集用の変更キュー（offline queue）は未配線。現在はオンライン保存時の同時更新競合のみ解決可能
 - 公開プラン取得APIは実装済みだが、共有リンク作成・閲覧用のフロントエンドUIは未実装
-- 通知レコードの保存・配信は実装済みだが、通知一覧・未読件数を表示するフロントエンドUIは未実装
 - タイムラインは複数候補を保持できるが、OpenAIが複数候補を生成する保証はない
 - OpenAI APIが未設定または失敗した場合、AI付箋・プランは生成せず画面へエラーを表示
 - `mockups/` は設計資料であり、Reactアプリのデータソースではない
