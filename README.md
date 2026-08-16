@@ -12,7 +12,7 @@ AIAU は、旅行やお出かけの相談をチャットで進めながら、AI 
 - AI が時間軸のプランを生成
 - 候補への投票、採用案の確定、変更履歴の復元
 - 確定プランと個人予定をカレンダーで一元管理
-- リアルタイム同期（Supabase Realtime）、Web Push、ICS出力、オフライン競合解決
+- リアルタイム同期（Supabase Realtime）、Web Push、ICS出力、同時更新競合の検出・解決
 
 ## 目次
 
@@ -78,8 +78,8 @@ PR #11時点のUI設計と操作意図を参照できるよう、静的モック
 ### タイムラインプラン
 
 - 付箋と旅行期間をもとにしたAIプラン生成・再生成
-- 日付ごとの水平タイムライン
-- 時間帯スロット内の複数候補
+- 日付ごとのタイムライン（横軸: 時刻）
+- 同じ時間帯の複数候補を保持・比較
 - 1ユーザー・1スロット・1票の投票
 - 最多票候補の確定
 - バージョン履歴、過去版preview、最新版としての復元
@@ -92,7 +92,7 @@ PR #11時点のUI設計と操作意図を参照できるよう、静的モック
 - 個人予定の作成・編集
 - 旅行プラン・元の付箋への導線
 - 旅行プランのICS書き出し
-- オフライン編集とサーバー更新の競合解決
+- 個人予定の同時更新競合を検出し、ローカル版／サーバー版から残す内容を選択
 - PWAキャッシュを利用したカレンダーフィードの耐障害性
 
 ### 通知と共有
@@ -100,12 +100,12 @@ PR #11時点のUI設計と操作意図を参照できるよう、静的モック
 - Web Push購読の登録
 - 通知権限が拒否された場合の再設定案内
 - `dispatch-push`による通知レコードのタイトル・本文・リンクの直接配信
-- 共有トークンによる公開プラン取得
+- 共有トークンによる公開プラン取得API（フロントエンドUIは未実装）
 - 通知レコードの重複防止
 
 #### Web Push直接確認
 
-Hosted SupabaseとMicrosoft Edgeを使い、実環境で購読登録、`dispatch-push`の`sent=1`、Service Workerでの通知タイトル・本文受信を直接確認しています。期限リマインダーを自動実行するschedulerは未設定です。
+Hosted SupabaseとMicrosoft Edgeを使い、実環境で購読登録、`dispatch-push`の`sent=1`、Service Workerでの通知タイトル・本文受信を直接確認しています。期限リマインダーを自動実行するスケジューラーは未設定です。
 
 購読登録:
 
@@ -155,7 +155,7 @@ React側では、ページから直接fixtureを読み込まず、`repositories`
 | Database / PostgreSQL | 旅行、メンバー、チャット、付箋、プラン、個人予定、通知、履歴の永続化 |
 | PostgREST | Repository層から単一テーブルをCRUD |
 | RPC | 旅行作成・参加、AI結果適用、投票、確定、履歴復元、競合解決をtransaction実行 |
-| Realtime | messages、notes、trip_members、plan、votes、notificationsの変更を画面へ反映 |
+| Realtime | messages、notes、trip_members、plan_slots、plan_options、votes、plan_versions、personal_events、offline_conflictsの変更を画面へ反映 |
 | Edge Functions | OpenAI付箋抽出・プラン生成、Web Push、ICS出力、公開プラン取得 |
 | Storage | 現在は未使用 |
 
@@ -319,7 +319,7 @@ AIAU/
 │  ├─ hooks/             # 匿名session bootstrap
 │  ├─ pages/             # Home / Ideas / Plan / Calendar
 │  ├─ repositories/      # Supabase table・RPC・Realtime access
-│  ├─ services/          # AI、Push、offline queue
+│  ├─ services/          # AI、Push、offline queue（未配線）
 │  ├─ test/              # UI contract / Supabase integration
 │  └─ types/             # Supabase生成型とdomain alias
 ├─ supabase/
@@ -415,7 +415,11 @@ SUPABASE_TEST_URL="$API_URL" SUPABASE_TEST_KEY="$PUBLISHABLE_KEY" npm run test:i
 - 匿名アカウントの端末間同期・復旧は未対応
 - 外部カレンダーとの双方向同期は未対応。現在はICS出力を提供
 - Web Pushにはブラウザ権限とVAPID設定が必要
-- `dispatch-push`の直接配信は確認済みだが、期限リマインダーを自動実行するschedulerは未設定
+- `dispatch-push`の直接配信は確認済みだが、期限リマインダーを自動実行するスケジューラーは未設定
+- オフライン編集用の変更キュー（offline queue）は未配線。現在はオンライン保存時の同時更新競合のみ解決可能
+- 公開プラン取得APIは実装済みだが、共有リンク作成・閲覧用のフロントエンドUIは未実装
+- 通知レコードの保存・配信は実装済みだが、通知一覧・未読件数を表示するフロントエンドUIは未実装
+- タイムラインは複数候補を保持できるが、OpenAIが複数候補を生成する保証はない
 - OpenAI APIが未設定または失敗した場合、AI付箋・プランは生成せず画面へエラーを表示
 - `mockups/` は設計資料であり、Reactアプリのデータソースではない
 - `seed.sql` はfixtureを投入せず、空のDBから開始する
