@@ -279,6 +279,7 @@ button { cursor: pointer; }
 .view-tab.active { color: var(--ink); background: #fff; box-shadow: 0 2px 6px rgba(36,52,71,.1); }
 .calendar-date { display: flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 800; }
 .calendar-date button { width: 25px; height: 25px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--mock-muted); }
+.calendar-trip-days { color: var(--mock-muted); font-size: 12px; font-weight: 600; }
 .legend { display: flex; flex-wrap: wrap; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--line); }
 .legend-item { display: flex; align-items: center; gap: 6px; color: var(--mock-muted); font-size: 10px; }
 .legend-color { width: 9px; height: 9px; border-radius: 3px; }
