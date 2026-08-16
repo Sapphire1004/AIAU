@@ -346,7 +346,7 @@ export function PlanPage({ userId }: { userId: string }) {
           </div>
 
           <div className="timeline-guide">
-            投票できるのは時間が競合している案だけです。時間が重なっていない競合は同じ行にまとめ、囲み枠と「競合A / 競合B」のラベルでどれとどれが同じ投票の選択肢かを示します。確定した予定を上段に、競合していない予定は下段の1行にまとめています。
+            投票できるのは時間が競合している案だけです。時間が重なっていない競合は同じ行にまとめ、囲み枠と「競合A / 競合B」のラベルでどれとどれが同じ投票の選択肢かを示します。確定した予定を上段に、競合していない予定と不採用の案は下段の行にまとめています。
           </div>
           <div aria-label="予定の種類" className="plan-legend">
             <span className="plan-legend-item">
@@ -454,12 +454,26 @@ function TimelineRows({ slots, optionsBySlot, ...props }: TimelineRowsProps) {
   const conflictGroups: SlotGroup[] = []
   const confirmedGroups: SlotGroup[] = []
 
+  const rejectedOptions: RejectedOption[] = []
+
   for (const slot of slots) {
     const options = optionsBySlot.get(slot.id) ?? EMPTY_OPTIONS
-    if (slot.status === 'confirmed') confirmedGroups.push({ slot, options })
-    else if (options.length > 1) conflictGroups.push({ slot, options })
+    if (slot.status === 'confirmed') {
+      // 不採用案は確定行から外し、優先度が低いので最下段の行にまとめる。
+      const adopted = options.filter((option) => option.id === slot.confirmed_option_id)
+      const rejected = options.filter((option) => option.id !== slot.confirmed_option_id)
+      confirmedGroups.push({ slot, options: adopted.length > 0 ? adopted : options })
+      if (adopted.length > 0) {
+        for (const option of rejected) rejectedOptions.push({ option, adoptedTitle: adopted[0].title })
+      }
+      continue
+    }
+    if (options.length > 1) conflictGroups.push({ slot, options })
     else settledOptions.push(...options)
   }
+  rejectedOptions.sort(
+    (left, right) => timestamp(left.option.start_at) - timestamp(right.option.start_at),
+  )
   settledOptions.sort((left, right) => timestamp(left.start_at) - timestamp(right.start_at))
   const conflictRows = packSlotGroups(conflictGroups)
   const confirmedRows = packSlotGroups(confirmedGroups)
@@ -508,6 +522,14 @@ function TimelineRows({ slots, optionsBySlot, ...props }: TimelineRowsProps) {
       {settledOptions.length > 0 && (
         <SettledRow options={settledOptions} scale={props.scale} timeZone={props.timeZone} tripId={props.tripId} />
       )}
+      {rejectedOptions.length > 0 && (
+        <RejectedRow
+          entries={rejectedOptions}
+          scale={props.scale}
+          timeZone={props.timeZone}
+          tripId={props.tripId}
+        />
+      )}
     </div>
   )
 }
@@ -539,6 +561,55 @@ function groupBounds(group: SlotGroup): { start: number; end: number } {
   const starts = [timestamp(group.slot.start_at), ...group.options.map((option) => timestamp(option.start_at))]
   const ends = [timestamp(group.slot.end_at), ...group.options.map((option) => timestamp(option.end_at))]
   return { start: Math.min(...starts), end: Math.max(...ends) }
+}
+
+type RejectedOption = {
+  option: PlanOption
+  adoptedTitle: string
+}
+
+type RejectedRowProps = {
+  entries: RejectedOption[]
+  scale: TimelineScale
+  timeZone: string
+  tripId: string
+}
+
+function RejectedRow({ entries, scale, timeZone, tripId }: RejectedRowProps) {
+  const start = entries[0].option.start_at
+  const end = entries.reduce(
+    (latest, entry) => (timestamp(entry.option.end_at) > timestamp(latest) ? entry.option.end_at : latest),
+    entries[0].option.end_at,
+  )
+  const byOption = new Map(entries.map((entry) => [entry.option.id, entry.adoptedTitle]))
+
+  return (
+    <section aria-label="不採用の案" className="timeline-row rejected-row">
+      <div className="row-label rejected-label">
+        <span className="candidate-name">不採用の案</span>
+        <strong>{formatTimeRange(start, end, timeZone)}</strong>
+        <span className="candidate-meta">{entries.length}件・投票で採用されなかった案</span>
+      </div>
+      <div className="time-track">
+        {assignLanes(entries.map((entry) => entry.option)).map((lane) => (
+          <div className="option-lane" key={lane[0].id}>
+            {lane.map((option) => (
+              <ScheduleBlock
+                key={option.id}
+                option={option}
+                originLabel={`不採用（「${byOption.get(option.id) ?? ''}」が採用）`}
+                rejected
+                scale={scale}
+                timeZone={timeZone}
+                tripId={tripId}
+                variant="option"
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+    </section>
+  )
 }
 
 type SettledRowProps = {

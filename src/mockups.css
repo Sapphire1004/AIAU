@@ -226,6 +226,8 @@ button { cursor: pointer; }
 .candidate-row { background: #fdfcff; }
 .confirmed-row { background: #f9fbfc; }
 .settled-row { background: #f8fcfb; }
+.rejected-row { background: #fafafa; }
+.rejected-label .candidate-name { color: var(--mock-muted); font-size: 12px; font-weight: 800; }
 .settled-label .candidate-name { color: var(--teal-dark); font-size: 12px; font-weight: 800; }
 .confirmed-label .candidate-name { color: var(--ink); font-size: 12px; font-weight: 800; }
 .candidate-label { align-items: flex-start; }
