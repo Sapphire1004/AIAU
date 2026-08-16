@@ -82,7 +82,7 @@ export function HomePage() {
       </div>
 
       <div className="home-intro-note mock-note">
-        <span>旅行を新しく作るか、共有された招待トークンで参加してください。表示内容はSupabaseの実データです。</span>
+        <span>旅行を新しく作るか、共有された招待トークンで参加してください。</span>
       </div>
 
       {error && <p className="home-feedback" role="alert">{error}</p>}
