@@ -142,6 +142,43 @@ describe('buildTimeline', () => {
     expect(timeline.conflictRows).toEqual([])
   })
 
+  it('marks an option of another slot as rejected when it still overlaps the adopted option', () => {
+    const adopted = option('ramen', 'slot-a', '2026-08-20T12:30:00+09:00', '2026-08-20T13:30:00+09:00')
+    const loser = option('sushi', 'slot-b', '2026-08-20T13:15:00+09:00', '2026-08-20T14:00:00+09:00')
+    const timeline = timelineOf(
+      [
+        slot('slot-a', adopted.start_at, adopted.end_at, {
+          status: 'confirmed',
+          confirmed_option_id: 'ramen',
+        }),
+        slot('slot-b', loser.start_at, loser.end_at),
+      ],
+      [adopted, loser],
+    )
+
+    expect(timeline.settledOptions).toEqual([])
+    expect(timeline.conflictRows).toEqual([])
+    expect(timeline.rejectedOptions).toEqual([{ option: loser, adoptedTitle: 'ramen' }])
+  })
+
+  it('keeps an option of another slot as a plan when it only touches the adopted option', () => {
+    const adopted = option('ramen', 'slot-a', '2026-08-20T12:30:00+09:00', '2026-08-20T13:30:00+09:00')
+    const next = option('museum', 'slot-b', '2026-08-20T13:30:00+09:00', '2026-08-20T14:00:00+09:00')
+    const timeline = timelineOf(
+      [
+        slot('slot-a', adopted.start_at, adopted.end_at, {
+          status: 'confirmed',
+          confirmed_option_id: 'ramen',
+        }),
+        slot('slot-b', next.start_at, next.end_at),
+      ],
+      [adopted, next],
+    )
+
+    expect(timeline.settledOptions.map((entry) => entry.id)).toEqual(['museum'])
+    expect(timeline.rejectedOptions).toEqual([])
+  })
+
   it('packs conflict groups that do not overlap into one row', () => {
     const lunchA = option('lunch-a', 'slot-a', '2026-08-20T12:30:00+09:00', '2026-08-20T13:30:00+09:00')
     const lunchB = option('lunch-b', 'slot-a', '2026-08-20T12:45:00+09:00', '2026-08-20T13:15:00+09:00')

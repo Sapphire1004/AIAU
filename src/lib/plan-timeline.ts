@@ -1,4 +1,4 @@
-import { clusterByOverlap } from '@/lib/plan-conflicts'
+import { clusterByOverlap, overlaps, type TimeSpan } from '@/lib/plan-conflicts'
 import type { PlanOption, PlanSlot } from '@/types/domain'
 
 export type SlotEntry = {
@@ -26,6 +26,10 @@ export type Timeline = {
   rejectedOptions: RejectedOption[]
   /** 競合グループの通し番号。ラベルと色を日単位で一意にする。 */
   conflictNumbers: Map<string, number>
+}
+
+function toSpan(option: PlanOption): TimeSpan {
+  return { start: timestamp(option.start_at), end: timestamp(option.end_at) }
 }
 
 export function timestamp(value: string): number {
@@ -95,7 +99,25 @@ export function buildTimeline(slots: PlanSlot[], optionsBySlot: Map<string, Plan
     openEntries.push(...options.map((option) => ({ slot, option })))
   }
 
-  const openGroups = buildOpenGroups(openEntries)
+  const confirmedEntries = confirmedGroups.flatMap((group) => group.entries)
+  // 採用案と時間が重なったまま残る案は、slotが違っても競合なしではなく不採用として扱う。
+  const remainingEntries: SlotEntry[] = []
+  for (const entry of openEntries) {
+    const adopted = confirmedEntries.find(
+      (confirmed) =>
+        entry.option.kind !== 'all_day' &&
+        confirmed.option.kind !== 'all_day' &&
+        confirmed.slot.confirmed_option_id === confirmed.option.id &&
+        overlaps(toSpan(entry.option), toSpan(confirmed.option)),
+    )
+    if (adopted) {
+      rejectedOptions.push({ option: entry.option, adoptedTitle: adopted.option.title })
+    } else {
+      remainingEntries.push(entry)
+    }
+  }
+
+  const openGroups = buildOpenGroups(remainingEntries)
   const conflictGroups = openGroups.filter((group) => group.entries.length > 1)
   const settledOptions = openGroups
     .filter((group) => group.entries.length === 1)

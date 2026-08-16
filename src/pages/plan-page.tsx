@@ -359,7 +359,7 @@ export function PlanPage({ userId }: { userId: string }) {
           </div>
 
           <div className="timeline-guide">
-            投票できるのは時間が競合している案だけです。開始・終了時刻が重なる予定は、別々に生成されていても同じ競合グループにまとめます。時間が重なっていない競合は同じ行にまとめ、囲み枠と「競合A / 競合B」のラベルでどれとどれが同じ投票の選択肢かを示します。確定した予定を上段に、競合していない予定と不採用の案は下段の行にまとめています。
+            投票できるのは時間が競合している案だけです。開始・終了時刻が重なる予定は、別々に生成されていても同じ競合グループにまとめます。時間が重なっていない競合は同じ行にまとめ、囲み枠と「競合A / 競合B」のラベルでどれとどれが同じ投票の選択肢かを示します。確定した予定を上段に、競合していない予定と不採用の案は下段の行にまとめています。採用案と時間が重なったまま残った案は、別々に生成されていても不採用の行に移します。
           </div>
           <div aria-label="予定の種類" className="plan-legend">
             <span className="plan-legend-item">
@@ -538,7 +538,7 @@ function RejectedRow({ entries, scale, timeZone, tripId }: RejectedRowProps) {
       <div className="row-label rejected-label">
         <span className="candidate-name">不採用の案</span>
         <strong>{formatTimeRange(start, end, timeZone)}</strong>
-        <span className="candidate-meta">{entries.length}件・投票で採用されなかった案</span>
+        <span className="candidate-meta">{entries.length}件・採用案に時間を譲った案</span>
       </div>
       <div className="time-track">
         {assignLanes(entries.map((entry) => entry.option)).map((lane) => (
