@@ -165,6 +165,59 @@ integration('Supabase integration', () => {
     ])
   }, 120_000)
 
+  openAIConfiguredIntegration('keeps every wish of a chat, including competing meals, as its own note', async () => {
+    const client = createClient<Database>(url!, key!)
+    const auth = await client.auth.signInAnonymously()
+    expect(auth.error).toBeNull()
+    const user = auth.data.user!
+
+    const tripResult = await client.rpc('create_trip', {
+      p_title: '希望の取りこぼしテスト',
+      p_nickname: 'sora',
+      p_starts_at: '2026-08-16T00:00:00Z',
+      p_ends_at: '2026-08-17T00:00:00Z',
+      p_timezone: 'Asia/Tokyo',
+    })
+    expect(tripResult.error).toBeNull()
+    const trip = tripResult.data![0]
+
+    const wishes = [
+      '東京タワー行きたい',
+      '神社行きたい',
+      '東京スカイツリー行きたい',
+      '楽しそう',
+      'お昼ご飯にカレーを食べたい',
+      'お昼に焼肉をしたい',
+      'おーい',
+      'GOGOカレーに行きたい',
+    ]
+    for (const text of wishes) {
+      const inserted = await client
+        .from('messages')
+        .insert({ trip_id: trip.trip_id, author_id: user.id, author_name: 'sora', text })
+      expect(inserted.error).toBeNull()
+    }
+
+    const extractResult = await client.functions.invoke('extract-notes', {
+      body: { trip_id: trip.trip_id, idempotency_key: crypto.randomUUID() },
+    })
+    expect(extractResult.error).toBeNull()
+
+    const notesResult = await client
+      .from('notes')
+      .select('title')
+      .eq('trip_id', trip.trip_id)
+      .is('deleted_at', null)
+    expect(notesResult.error).toBeNull()
+    const titles = (notesResult.data ?? []).map((note) => note.title)
+
+    // 同じ時間帯を争う食事の希望も、まとめず1件ずつ付箋にする。
+    for (const wish of ['東京タワー', '神社', 'スカイツリー', 'カレー', '焼肉', 'GOGOカレー']) {
+      expect(titles.some((title) => title.includes(wish))).toBe(true)
+    }
+    expect(titles).toHaveLength(6)
+  }, 120_000)
+
   it('runs the collaborative trip flow with RLS, voting, history, and calendar data', async () => {
     const ownerClient = createClient<Database>(url!, key!)
     const memberClient = createClient<Database>(url!, key!)

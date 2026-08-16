@@ -108,6 +108,7 @@ Deno.serve(async (request) => {
       'Include at least one option in every slot. Respect the trip start, trip end, timezone, budget, and every busy interval.',
       'Do not overlap slots or busy intervals. Ensure every end_at is after start_at.',
       'When ideas compete for the same time range, return them as multiple options inside one slot so members can vote, never as separate slots.',
+      'Notes that cannot all happen belong in one slot as competing options, for example several lunch wishes such as curry and yakiniku, or a food wish and a named restaurant serving that food.',
     ].join(' ')
     let parsed: z.infer<typeof generatedPlan>
     try {
