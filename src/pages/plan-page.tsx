@@ -520,18 +520,12 @@ type RejectedRowProps = {
 }
 
 function RejectedRow({ entries, scale, timeZone, tripId }: RejectedRowProps) {
-  const start = entries[0].option.start_at
-  const end = entries.reduce(
-    (latest, entry) => (timestamp(entry.option.end_at) > timestamp(latest) ? entry.option.end_at : latest),
-    entries[0].option.end_at,
-  )
   const byOption = new Map(entries.map((entry) => [entry.option.id, entry.adoptedTitle]))
 
   return (
     <section aria-label="不採用の案" className="timeline-row rejected-row">
       <div className="row-label rejected-label">
         <span className="candidate-name">不採用の案</span>
-        <strong>{formatTimeRange(start, end, timeZone)}</strong>
         <span className="candidate-meta">{entries.length}件・採用案に時間を譲った案</span>
       </div>
       <div className="time-track">
@@ -594,18 +588,15 @@ function SlotRow({
       return entry ? [{ group, entry }] : []
     }),
   )
-  const rowStart = Math.min(...groups.map((group) => group.start))
-  const rowEnd = Math.max(...groups.map((group) => group.end))
   const optionCount = groups.reduce((total, group) => total + group.entries.length, 0)
 
   return (
     <section
-      aria-label={`${formatTimeRange(toIsoString(rowStart), toIsoString(rowEnd), timeZone)}の${isConfirmedRow ? '確定した予定' : '競合候補'}`}
+      aria-label={isConfirmedRow ? '確定した予定' : '競合候補'}
       className={`timeline-row ${isConfirmedRow ? 'confirmed-row' : 'candidate-row'}`}
     >
       <div className={`row-label ${isConfirmedRow ? 'confirmed-label' : 'candidate-label'}`}>
         <span className="candidate-name">{isConfirmedRow ? '確定した予定' : '競合候補'}</span>
-        <strong>{formatTimeRange(toIsoString(rowStart), toIsoString(rowEnd), timeZone)}</strong>
         <span className="candidate-meta">
           {isConfirmedRow
             ? `${groups.length}件・採用済みと競合なしの予定`
@@ -624,10 +615,11 @@ function SlotRow({
               style={{ ...timelineSpanStyle(group, scale), '--group-accent': groupAccent(groupIndex) } as CSSProperties}
             >
               <span className="slot-band-label">
-                {isConfirmedRow ? (group.entries[0]?.slot.status === 'confirmed' ? '確定' : '競合なし') : `競合${groupLabel(groupIndex)}`}
-                {' '}
-                {formatTimeRange(toIsoString(group.start), toIsoString(group.end), timeZone)}
-                {isConfirmedRow ? '' : ` ・ ${group.entries.length}案から1つ`}
+                {isConfirmedRow
+                  ? group.entries[0]?.slot.status === 'confirmed'
+                    ? '確定'
+                    : '競合なし'
+                  : `競合${groupLabel(groupIndex)} ${formatTimeRange(toIsoString(group.start), toIsoString(group.end), timeZone)} ・ ${group.entries.length}案から1つ`}
               </span>
             </div>
           )
