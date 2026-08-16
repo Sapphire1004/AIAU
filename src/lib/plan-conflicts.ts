@@ -4,7 +4,7 @@ export type TimeSpan = {
 }
 
 export type ClusterItem = TimeSpan & {
-  /** 同じkeyの要素は、時間が重なっていなくても同じグループへまとめる。 */
+  /** 時間を比較できない要素同士は、keyが同じ場合に限り同じグループへまとめる。 */
   key: string
   /** 終日予定のように時間帯の比較になじまない要素を、重複判定から外す。 */
   overlapExempt?: boolean
@@ -41,7 +41,7 @@ export function clusterByOverlap<T extends ClusterItem>(items: T[]): T[][] {
     for (let other = index + 1; other < items.length; other += 1) {
       const sameKey = items[index].key === items[other].key
       const comparable = !items[index].overlapExempt && !items[other].overlapExempt
-      if (sameKey || (comparable && overlaps(items[index], items[other]))) merge(index, other)
+      if (comparable ? overlaps(items[index], items[other]) : sameKey) merge(index, other)
     }
   }
 

@@ -179,6 +179,19 @@ describe('buildTimeline', () => {
     expect(timeline.rejectedOptions).toEqual([])
   })
 
+  it('keeps options of one slot separate when their times do not overlap', () => {
+    const shinjuku = option('shinjuku', 'slot-a', '2026-08-20T14:16:00+09:00', '2026-08-20T15:16:00+09:00')
+    const tokyo = option('tokyo', 'slot-a', '2026-08-20T15:16:00+09:00', '2026-08-20T16:16:00+09:00')
+    const timeline = timelineOf([slot('slot-a', shinjuku.start_at, tokyo.end_at)], [shinjuku, tokyo])
+
+    expect(timeline.conflictRows).toEqual([])
+    expect(timeline.confirmedRows).toHaveLength(1)
+    expect(timeline.confirmedRows[0].map((group) => group.entries.map((entry) => entry.option.id))).toEqual([
+      ['shinjuku'],
+      ['tokyo'],
+    ])
+  })
+
   it('packs conflict groups that do not overlap into one row', () => {
     const lunchA = option('lunch-a', 'slot-a', '2026-08-20T12:30:00+09:00', '2026-08-20T13:30:00+09:00')
     const lunchB = option('lunch-b', 'slot-a', '2026-08-20T12:45:00+09:00', '2026-08-20T13:15:00+09:00')

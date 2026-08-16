@@ -53,15 +53,10 @@ export function buildOpenGroups(entries: SlotEntry[]): TimelineGroup[] {
   return clusters.map((cluster) => createGroup(cluster[0].entry.option.id, cluster.map((item) => item.entry)))
 }
 
-export function createGroup(key: string, entries: SlotEntry[], slot?: PlanSlot): TimelineGroup {
-  const starts = [
-    ...entries.map((entry) => timestamp(entry.option.start_at)),
-    ...(slot ? [timestamp(slot.start_at)] : []),
-  ]
-  const ends = [
-    ...entries.map((entry) => timestamp(entry.option.end_at)),
-    ...(slot ? [timestamp(slot.end_at)] : []),
-  ]
+/** 帯の範囲は案の実時間で決める。slotの範囲まで含めると、隣の予定と重なって同じ行に並べられなくなる。 */
+export function createGroup(key: string, entries: SlotEntry[]): TimelineGroup {
+  const starts = entries.map((entry) => timestamp(entry.option.start_at))
+  const ends = entries.map((entry) => timestamp(entry.option.end_at))
   return { key, entries, start: Math.min(...starts), end: Math.max(...ends) }
 }
 
@@ -92,7 +87,7 @@ export function buildTimeline(slots: PlanSlot[], optionsBySlot: Map<string, Plan
       const adopted = options.filter((option) => option.id === slot.confirmed_option_id)
       const rejected = options.filter((option) => option.id !== slot.confirmed_option_id)
       const shown = adopted.length > 0 ? adopted : options
-      confirmedGroups.push(createGroup(slot.id, shown.map((option) => ({ slot, option })), slot))
+      confirmedGroups.push(createGroup(slot.id, shown.map((option) => ({ slot, option }))))
       if (adopted.length > 0) {
         for (const option of rejected) rejectedOptions.push({ option, adoptedTitle: adopted[0].title })
       }
