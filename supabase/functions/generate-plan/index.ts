@@ -110,6 +110,11 @@ Deno.serve(async (request) => {
       'When ideas compete for the same time range, return them as multiple options inside one slot so members can vote, never as separate slots.',
       'Activities that happen one after another belong in separate slots, even when they are close in time. A slot with several options always means members must pick one of them.',
       'Notes that cannot all happen belong in one slot as competing options, for example several lunch wishes such as curry and yakiniku, or a food wish and a named restaurant serving that food.',
+      'Account for travel time between places. Whenever two consecutive activities are at different places, put a travel option between them in its own slot, with kind "travel", note_id null, and a title naming both ends such as "東京タワー→浅草寺の移動".',
+      'Estimate each travel duration from the real distance between the two places using the transport members would realistically take in that area, and never leave an activity starting at the exact moment the previous one ends unless both are at the same place or within a few minutes on foot.',
+      'Never hide travel time inside an activity option and never let a travel option overlap an activity or a busy interval. Put the assumed transport mode in the travel option attrs as "mode" and the estimated minutes as "duration", and state the assumption in reason. Do not invent addresses, fares, or exact routes.',
+      'When trip.origin is set, start the first travel option of the trip from it and end the last travel option of the trip at it.',
+      'A travel option is never a competing candidate, so keep every travel option alone in its slot.',
     ].join(' ')
     let parsed: z.infer<typeof generatedPlan>
     try {

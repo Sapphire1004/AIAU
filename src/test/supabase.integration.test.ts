@@ -218,6 +218,71 @@ integration('Supabase integration', () => {
     expect(titles).toHaveLength(6)
   }, 120_000)
 
+  openAIConfiguredIntegration('puts travel time between activities at different places', async () => {
+    const client = createClient<Database>(url!, key!)
+    const auth = await client.auth.signInAnonymously()
+    expect(auth.error).toBeNull()
+    const user = auth.data.user!
+
+    const tripResult = await client.rpc('create_trip', {
+      p_title: '移動時間テスト',
+      p_nickname: 'sora',
+      p_starts_at: '2026-08-16T00:00:00Z',
+      p_ends_at: '2026-08-17T00:00:00Z',
+      p_timezone: 'Asia/Tokyo',
+      p_origin: '東京駅',
+    })
+    expect(tripResult.error).toBeNull()
+    const trip = tripResult.data![0]
+
+    const notesInsert = await client
+      .from('notes')
+      .insert(
+        ['東京タワー', '浅草寺'].map((title) => ({
+          trip_id: trip.trip_id,
+          author_id: user.id,
+          title,
+          origin: 'user' as const,
+          attrs: { duration: 60 },
+        })),
+      )
+      .select('id')
+    expect(notesInsert.error).toBeNull()
+
+    const generateResult = await client.functions.invoke('generate-plan', {
+      body: {
+        trip_id: trip.trip_id,
+        plan_id: trip.plan_id,
+        expected_version: 0,
+        regenerate: false,
+        idempotency_key: crypto.randomUUID(),
+      },
+    })
+    expect(generateResult.error).toBeNull()
+
+    const slotsResult = await client
+      .from('plan_slots')
+      .select('plan_options!plan_options_slot_id_fkey(title,start_at,end_at,kind,note_id)')
+      .eq('plan_id', trip.plan_id)
+      .is('deleted_at', null)
+    expect(slotsResult.error).toBeNull()
+    const options = (slotsResult.data ?? []).flatMap((slot) => slot.plan_options ?? [])
+    const travelOptions = options.filter((option) => option.kind === 'travel')
+
+    // 離れた2箇所の予定の間には、移動の案が入り、実際の空き時間として確保される。
+    expect(travelOptions.length).toBeGreaterThan(0)
+    expect(travelOptions.every((option) => option.note_id === null)).toBe(true)
+    expect(
+      travelOptions.every((option) => Date.parse(option.end_at) - Date.parse(option.start_at) >= 5 * 60 * 1000),
+    ).toBe(true)
+
+    const activities = options
+      .filter((option) => option.kind === 'activity')
+      .sort((left, right) => Date.parse(left.start_at) - Date.parse(right.start_at))
+    expect(activities).toHaveLength(2)
+    expect(Date.parse(activities[1].start_at)).toBeGreaterThan(Date.parse(activities[0].end_at))
+  }, 120_000)
+
   it('runs the collaborative trip flow with RLS, voting, history, and calendar data', async () => {
     const ownerClient = createClient<Database>(url!, key!)
     const memberClient = createClient<Database>(url!, key!)
