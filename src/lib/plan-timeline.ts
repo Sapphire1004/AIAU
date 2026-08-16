@@ -53,15 +53,10 @@ export function buildOpenGroups(entries: SlotEntry[]): TimelineGroup[] {
   return clusters.map((cluster) => createGroup(cluster[0].entry.option.id, cluster.map((item) => item.entry)))
 }
 
-export function createGroup(key: string, entries: SlotEntry[], slot?: PlanSlot): TimelineGroup {
-  const starts = [
-    ...entries.map((entry) => timestamp(entry.option.start_at)),
-    ...(slot ? [timestamp(slot.start_at)] : []),
-  ]
-  const ends = [
-    ...entries.map((entry) => timestamp(entry.option.end_at)),
-    ...(slot ? [timestamp(slot.end_at)] : []),
-  ]
+/** 帯の範囲は案の実時間で決める。slotの範囲まで含めると、隣の予定と重なって同じ行に並べられなくなる。 */
+export function createGroup(key: string, entries: SlotEntry[]): TimelineGroup {
+  const starts = entries.map((entry) => timestamp(entry.option.start_at))
+  const ends = entries.map((entry) => timestamp(entry.option.end_at))
   return { key, entries, start: Math.min(...starts), end: Math.max(...ends) }
 }
 
@@ -92,7 +87,7 @@ export function buildTimeline(slots: PlanSlot[], optionsBySlot: Map<string, Plan
       const adopted = options.filter((option) => option.id === slot.confirmed_option_id)
       const rejected = options.filter((option) => option.id !== slot.confirmed_option_id)
       const shown = adopted.length > 0 ? adopted : options
-      confirmedGroups.push(createGroup(slot.id, shown.map((option) => ({ slot, option })), slot))
+      confirmedGroups.push(createGroup(slot.id, shown.map((option) => ({ slot, option }))))
       if (adopted.length > 0) {
         for (const option of rejected) rejectedOptions.push({ option, adoptedTitle: adopted[0].title })
       }
@@ -139,6 +134,31 @@ export function buildTimeline(slots: PlanSlot[], optionsBySlot: Map<string, Plan
         .map((group, index) => [group.key, index] as const),
     ),
   }
+}
+
+export const COLUMNS_PER_HOUR = 4
+
+/**
+ * 予定をタイムラインのCSS Gridの列へ割り当てる。
+ * 開始と終了を同じ丸め方にして、連続する予定が1列重なって下段へ送られないようにする。
+ */
+export function timelineGridColumn(
+  option: Pick<PlanOption, 'kind' | 'start_at' | 'end_at'>,
+  scale: { start: number; hourCount: number },
+): string {
+  const columns = scale.hourCount * COLUMNS_PER_HOUR
+  if (option.kind === 'all_day') return `1 / span ${columns}`
+  const columnDuration = (60 / COLUMNS_PER_HOUR) * 60 * 1000
+  const optionStart = timestamp(option.start_at)
+  const optionEnd = timestamp(option.end_at)
+  if (!Number.isFinite(optionStart) || !Number.isFinite(optionEnd)) return `1 / span ${COLUMNS_PER_HOUR}`
+  const startColumn = clamp(Math.round((optionStart - scale.start) / columnDuration), 0, columns - 1)
+  const endColumn = clamp(Math.round((optionEnd - scale.start) / columnDuration), startColumn + 1, columns)
+  return `${startColumn + 1} / span ${endColumn - startColumn}`
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(Math.max(value, minimum), maximum)
 }
 
 /** 同じ競合グループの別slotへ入れた自分の票を取り消すため、対象slotを求める。 */

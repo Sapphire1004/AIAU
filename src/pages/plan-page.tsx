@@ -5,7 +5,9 @@ import { ErrorState, LoadingState } from '@/components/layout/states'
 import { Button } from '@/components/ui/button'
 import {
   buildTimeline,
+  COLUMNS_PER_HOUR,
   supersededSlotIds,
+  timelineGridColumn,
   timestamp,
   type RejectedOption,
   type SlotEntry,
@@ -28,7 +30,6 @@ import type { PlanOption, PlanSlot, PlanSnapshot, PlanVersion, Trip, Vote } from
 const EMPTY_SLOTS: PlanSlot[] = []
 const EMPTY_OPTIONS: PlanOption[] = []
 const EMPTY_VOTES: Vote[] = []
-const COLUMNS_PER_HOUR = 4
 const GROUP_ACCENTS = ['#7c5cbf', '#c2669a', '#4f86c6', '#c78a3c']
 
 export function PlanPage({ userId }: { userId: string }) {
@@ -803,7 +804,12 @@ function ScheduleBlock({
   return (
     <article
       className={`schedule-block ${variant}${rejected ? ' rejected' : ''}`}
-      style={{ gridColumn: timelineGridColumn(option, scale), '--group-accent': accent } as CSSProperties}
+      style={
+        {
+          gridColumn: timelineGridColumn(option, { hourCount: scale.hours.length, start: scale.start }),
+          '--group-accent': accent,
+        } as CSSProperties
+      }
     >
       <span className="schedule-origin">{originLabel}</span>
       <h3 className="schedule-title">{option.title}</h3>
@@ -1177,18 +1183,6 @@ function timelineGridStyle(scale: TimelineScale): CSSProperties {
     '--timeline-hours': scale.hours.length,
     '--timeline-columns': scale.hours.length * COLUMNS_PER_HOUR,
   } as CSSProperties
-}
-
-function timelineGridColumn(option: PlanOption, scale: TimelineScale): string {
-  const columns = scale.hours.length * COLUMNS_PER_HOUR
-  if (option.kind === 'all_day') return `1 / span ${columns}`
-  const columnDuration = (60 / COLUMNS_PER_HOUR) * 60 * 1000
-  const optionStart = timestamp(option.start_at)
-  const optionEnd = timestamp(option.end_at)
-  if (!Number.isFinite(optionStart) || !Number.isFinite(optionEnd)) return `1 / span ${COLUMNS_PER_HOUR}`
-  const startColumn = clamp(Math.floor((optionStart - scale.start) / columnDuration), 0, columns - 1)
-  const endColumn = clamp(Math.ceil((optionEnd - scale.start) / columnDuration), startColumn + 1, columns)
-  return `${startColumn + 1} / span ${endColumn - startColumn}`
 }
 
 function timelineSpanStyle(bounds: { start: number; end: number }, scale: TimelineScale): CSSProperties {

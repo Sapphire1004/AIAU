@@ -44,11 +44,18 @@ describe('clusterByOverlap', () => {
     expect(clusterByOverlap([firstDay, secondDay])).toEqual([[firstDay], [secondDay]])
   })
 
-  it('groups items that share a key even when their times do not overlap', () => {
+  it('keeps items that share a key apart when their times do not overlap', () => {
     const morning = span('2026-08-20T09:00:00+09:00', '2026-08-20T10:00:00+09:00', 'slot-a')
     const evening = span('2026-08-20T19:00:00+09:00', '2026-08-20T20:00:00+09:00', 'slot-a')
 
-    expect(clusterByOverlap([morning, evening])).toEqual([[morning, evening]])
+    expect(clusterByOverlap([morning, evening])).toEqual([[morning], [evening]])
+  })
+
+  it('groups exempt items that share a key, since their times cannot be compared', () => {
+    const stay = { ...span('2026-08-20T00:00:00+09:00', '2026-08-21T00:00:00+09:00', 'slot-a'), overlapExempt: true }
+    const trip = { ...span('2026-08-21T00:00:00+09:00', '2026-08-22T00:00:00+09:00', 'slot-a'), overlapExempt: true }
+
+    expect(clusterByOverlap([stay, trip])).toEqual([[stay, trip]])
   })
 
   it('keeps exempt items such as all-day plans out of overlap grouping', () => {
@@ -99,12 +106,15 @@ describe('mergeOverlappingSlots', () => {
     expect(merged.map((slot) => slot.options)).toEqual([[yanaka], [next]])
   })
 
-  it('keeps options of one slot together even when they do not overlap', () => {
+  it('splits options of one slot when their times do not overlap', () => {
     const merged = mergeOverlappingSlots([
       { start_at: yanaka.start_at, end_at: dinner.end_at, options: [yanaka, dinner] },
     ])
 
-    expect(merged).toEqual([{ start_at: yanaka.start_at, end_at: dinner.end_at, options: [yanaka, dinner] }])
+    expect(merged).toEqual([
+      { start_at: yanaka.start_at, end_at: yanaka.end_at, options: [yanaka] },
+      { start_at: dinner.start_at, end_at: dinner.end_at, options: [dinner] },
+    ])
   })
 
   it('does not merge all-day options with timed options', () => {

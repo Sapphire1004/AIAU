@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildTimeline, supersededSlotIds } from '@/lib/plan-timeline'
+import { buildTimeline, supersededSlotIds, timelineGridColumn } from '@/lib/plan-timeline'
 import type { PlanOption, PlanSlot } from '@/types/domain'
 
 function slot(id: string, startAt: string, endAt: string, overrides: Partial<PlanSlot> = {}): PlanSlot {
@@ -179,6 +179,19 @@ describe('buildTimeline', () => {
     expect(timeline.rejectedOptions).toEqual([])
   })
 
+  it('keeps options of one slot separate when their times do not overlap', () => {
+    const shinjuku = option('shinjuku', 'slot-a', '2026-08-20T14:16:00+09:00', '2026-08-20T15:16:00+09:00')
+    const tokyo = option('tokyo', 'slot-a', '2026-08-20T15:16:00+09:00', '2026-08-20T16:16:00+09:00')
+    const timeline = timelineOf([slot('slot-a', shinjuku.start_at, tokyo.end_at)], [shinjuku, tokyo])
+
+    expect(timeline.conflictRows).toEqual([])
+    expect(timeline.confirmedRows).toHaveLength(1)
+    expect(timeline.confirmedRows[0].map((group) => group.entries.map((entry) => entry.option.id))).toEqual([
+      ['shinjuku'],
+      ['tokyo'],
+    ])
+  })
+
   it('packs conflict groups that do not overlap into one row', () => {
     const lunchA = option('lunch-a', 'slot-a', '2026-08-20T12:30:00+09:00', '2026-08-20T13:30:00+09:00')
     const lunchB = option('lunch-b', 'slot-a', '2026-08-20T12:45:00+09:00', '2026-08-20T13:15:00+09:00')
@@ -195,6 +208,26 @@ describe('buildTimeline', () => {
     expect(timeline.conflictRows).toHaveLength(1)
     expect(timeline.conflictRows[0]).toHaveLength(2)
     expect([...timeline.conflictNumbers.values()]).toEqual([0, 1])
+  })
+})
+
+describe('timelineGridColumn', () => {
+  const scale = { hourCount: 12, start: Date.parse('2026-08-20T09:00:00+09:00') }
+
+  it('does not share a column between back-to-back plans, so they stay on one row', () => {
+    const shinjuku = option('shinjuku', 'slot-a', '2026-08-20T14:16:00+09:00', '2026-08-20T15:16:00+09:00')
+    const tokyo = option('tokyo', 'slot-a', '2026-08-20T15:16:00+09:00', '2026-08-20T16:16:00+09:00')
+
+    expect(timelineGridColumn(shinjuku, scale)).toBe('22 / span 4')
+    expect(timelineGridColumn(tokyo, scale)).toBe('26 / span 4')
+  })
+
+  it('spans the whole track for an all-day plan', () => {
+    const stay = option('stay', 'slot-a', '2026-08-20T00:00:00+09:00', '2026-08-21T00:00:00+09:00', {
+      kind: 'all_day',
+    })
+
+    expect(timelineGridColumn(stay, scale)).toBe('1 / span 48')
   })
 })
 

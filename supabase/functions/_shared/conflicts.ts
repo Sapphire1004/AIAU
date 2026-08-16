@@ -19,7 +19,10 @@ export type MergedSlot<Option extends PlanOptionInput> = {
   options: Option[]
 }
 
-/** 時間が重なる案を1つのslotへまとめ、投票で1案を選べる競合候補として保存する。 */
+/**
+ * 時間が重なる案を1つのslotへまとめ、投票で1案を選べる競合候補として保存する。
+ * 同じslotに入っていても時間が重ならない案は競合ではないので、別のslotへ分ける。
+ */
 export function mergeOverlappingSlots<Option extends PlanOptionInput, Slot extends PlanSlotInput<Option>>(
   slots: Slot[],
 ): MergedSlot<Option>[] {
@@ -57,7 +60,8 @@ export function mergeOverlappingSlots<Option extends PlanOptionInput, Slot exten
         Number.isFinite(right.start) &&
         Number.isFinite(right.end)
       const timesOverlap = comparable && left.start < right.end && left.end > right.start
-      if (left.slotIndex === right.slotIndex || timesOverlap) merge(index, other)
+      // 時間を比較できない案（終日など）は、同じslotに入っているかどうかで判断する。
+      if (timesOverlap || (!comparable && left.slotIndex === right.slotIndex)) merge(index, other)
     }
   }
 
