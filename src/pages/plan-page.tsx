@@ -346,7 +346,7 @@ export function PlanPage({ userId }: { userId: string }) {
           </div>
 
           <div className="timeline-guide">
-            投票できるのは時間が競合している案だけです。時間が重なっていない競合は同じ行にまとめ、囲み枠と「競合A / 競合B」のラベルでどれとどれが同じ投票の選択肢かを示します。競合していない予定は上段の1行にまとめています。
+            投票できるのは時間が競合している案だけです。時間が重なっていない競合は同じ行にまとめ、囲み枠と「競合A / 競合B」のラベルでどれとどれが同じ投票の選択肢かを示します。確定した予定を上段に、競合していない予定は下段の1行にまとめています。
           </div>
           <div aria-label="予定の種類" className="plan-legend">
             <span className="plan-legend-item">
@@ -487,18 +487,6 @@ function TimelineRows({ slots, optionsBySlot, ...props }: TimelineRowsProps) {
 
   return (
     <div className="timeline-rows">
-      {settledOptions.length > 0 && (
-        <SettledRow options={settledOptions} scale={props.scale} timeZone={props.timeZone} tripId={props.tripId} />
-      )}
-      {conflictRows.map((groups) => (
-        <SlotRow
-          groupNumbers={conflictNumbers}
-          groups={groups}
-          key={groups[0].slot.id}
-          variant="conflict"
-          {...props}
-        />
-      ))}
       {confirmedRows.map((groups) => (
         <SlotRow
           groupNumbers={conflictNumbers}
@@ -508,6 +496,18 @@ function TimelineRows({ slots, optionsBySlot, ...props }: TimelineRowsProps) {
           {...props}
         />
       ))}
+      {conflictRows.map((groups) => (
+        <SlotRow
+          groupNumbers={conflictNumbers}
+          groups={groups}
+          key={groups[0].slot.id}
+          variant="conflict"
+          {...props}
+        />
+      ))}
+      {settledOptions.length > 0 && (
+        <SettledRow options={settledOptions} scale={props.scale} timeZone={props.timeZone} tripId={props.tripId} />
+      )}
     </div>
   )
 }
