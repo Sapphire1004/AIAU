@@ -158,8 +158,10 @@ React側では、ページから直接fixtureを読み込まず、`repositories`
 | Backend | Supabase Auth、PostgreSQL、PostgREST、RPC、Realtime、Edge Functions |
 | Validation | Zod 4、PostgreSQL制約、RLS |
 | PWA | vite-plugin-pwa、Workbox |
-| Test | Vitest、pgTAP、Supabase Integration Test |
+| Test | Vitest、pgTAP、Supabase Integration Test 、 Devin |
 | CI | GitHub Actions、Node.js 24 |
+| AI | Devin |
+| LLM | Open AI |
 
 ## ローカル開発
 
