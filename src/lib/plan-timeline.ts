@@ -136,6 +136,31 @@ export function buildTimeline(slots: PlanSlot[], optionsBySlot: Map<string, Plan
   }
 }
 
+export const COLUMNS_PER_HOUR = 4
+
+/**
+ * 予定をタイムラインのCSS Gridの列へ割り当てる。
+ * 開始と終了を同じ丸め方にして、連続する予定が1列重なって下段へ送られないようにする。
+ */
+export function timelineGridColumn(
+  option: Pick<PlanOption, 'kind' | 'start_at' | 'end_at'>,
+  scale: { start: number; hourCount: number },
+): string {
+  const columns = scale.hourCount * COLUMNS_PER_HOUR
+  if (option.kind === 'all_day') return `1 / span ${columns}`
+  const columnDuration = (60 / COLUMNS_PER_HOUR) * 60 * 1000
+  const optionStart = timestamp(option.start_at)
+  const optionEnd = timestamp(option.end_at)
+  if (!Number.isFinite(optionStart) || !Number.isFinite(optionEnd)) return `1 / span ${COLUMNS_PER_HOUR}`
+  const startColumn = clamp(Math.round((optionStart - scale.start) / columnDuration), 0, columns - 1)
+  const endColumn = clamp(Math.round((optionEnd - scale.start) / columnDuration), startColumn + 1, columns)
+  return `${startColumn + 1} / span ${endColumn - startColumn}`
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(Math.max(value, minimum), maximum)
+}
+
 /** 同じ競合グループの別slotへ入れた自分の票を取り消すため、対象slotを求める。 */
 export function supersededSlotIds(group: TimelineGroup, slotId: string): string[] {
   return [...new Set(group.entries.map((entry) => entry.slot.id).filter((id) => id !== slotId))]
