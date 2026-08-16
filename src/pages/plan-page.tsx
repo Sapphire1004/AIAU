@@ -463,6 +463,12 @@ function TimelineRows({ slots, optionsBySlot, ...props }: TimelineRowsProps) {
   settledOptions.sort((left, right) => timestamp(left.start_at) - timestamp(right.start_at))
   const conflictRows = packSlotGroups(conflictGroups)
   const confirmedRows = packSlotGroups(confirmedGroups)
+  // 番号と色は日単位の通し番号にして、行が変わっても同じラベルが重複しないようにする。
+  const conflictNumbers = new Map(
+    [...conflictGroups]
+      .sort((left, right) => groupBounds(left).start - groupBounds(right).start)
+      .map((group, index) => [group.slot.id, index] as const),
+  )
 
   if (settledOptions.length === 0 && conflictRows.length === 0 && confirmedRows.length === 0) {
     return (
@@ -485,10 +491,22 @@ function TimelineRows({ slots, optionsBySlot, ...props }: TimelineRowsProps) {
         <SettledRow options={settledOptions} scale={props.scale} timeZone={props.timeZone} tripId={props.tripId} />
       )}
       {conflictRows.map((groups) => (
-        <SlotRow groups={groups} key={groups[0].slot.id} variant="conflict" {...props} />
+        <SlotRow
+          groupNumbers={conflictNumbers}
+          groups={groups}
+          key={groups[0].slot.id}
+          variant="conflict"
+          {...props}
+        />
       ))}
       {confirmedRows.map((groups) => (
-        <SlotRow groups={groups} key={groups[0].slot.id} variant="confirmed" {...props} />
+        <SlotRow
+          groupNumbers={conflictNumbers}
+          groups={groups}
+          key={groups[0].slot.id}
+          variant="confirmed"
+          {...props}
+        />
       ))}
     </div>
   )
@@ -577,11 +595,13 @@ function assignLanes(options: PlanOption[]): PlanOption[][] {
 
 type SlotRowProps = Omit<TimelineRowsProps, 'slots' | 'optionsBySlot'> & {
   groups: SlotGroup[]
+  groupNumbers: Map<string, number>
   variant: 'conflict' | 'confirmed'
 }
 
 function SlotRow({
   groups,
+  groupNumbers,
   variant,
   votes,
   userId,
@@ -622,8 +642,9 @@ function SlotRow({
         </span>
       </div>
       <div className="time-track">
-        {groups.map((group, groupIndex) => {
+        {groups.map((group) => {
           const bounds = groupBounds(group)
+          const groupIndex = groupNumbers.get(group.slot.id) ?? 0
           return (
             <div
               className={`slot-band ${isConfirmedRow ? 'confirmed-band' : 'conflict-band'}`}
@@ -644,7 +665,7 @@ function SlotRow({
             {lane.map(({ group, option }) => (
               <SlotOptionBlock
                 actionKey={actionKey}
-                groupIndex={groups.indexOf(group)}
+                groupIndex={groupNumbers.get(group.slot.id) ?? 0}
                 key={option.id}
                 lane={laneIndex}
                 onConfirm={onConfirm}
