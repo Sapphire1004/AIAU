@@ -95,10 +95,6 @@ PR #11時点のUI設計と操作意図を参照できるよう、静的モック
 - 個人予定の同時更新競合を検出し、ローカル版／サーバー版から残す内容を選択
 - PWAキャッシュを利用したカレンダーフィードの耐障害性
 
-### 共有
-
-- 共有トークンによる公開プラン取得API（フロントエンドUIは未実装）
-
 ## アーキテクチャ
 
 ```mermaid
@@ -140,7 +136,7 @@ React側では、ページから直接fixtureを読み込まず、`repositories`
 | PostgREST | Repository層から単一テーブルをCRUD |
 | RPC | 旅行作成・参加、AI結果適用、投票、確定、履歴復元、競合解決をtransaction実行 |
 | Realtime | messages、notes、trip_members、plan_slots、plan_options、votes、plan_versions、personal_events、offline_conflictsの変更を画面へ反映 |
-| Edge Functions | OpenAI付箋抽出・プラン生成、ICS出力、公開プラン取得 |
+| Edge Functions | OpenAI付箋抽出・プラン生成、ICS出力 |
 
 ### Edge Functions
 
@@ -149,7 +145,6 @@ React側では、ページから直接fixtureを読み込まず、`repositories`
 | `extract-notes` | 未処理チャットを読み、付箋の追加・更新・保留を適用 |
 | `generate-plan` | 付箋、旅行期間、個人予定を考慮してタイムラインを生成 |
 | `export-ics` | 確定済みプランをICSとして出力 |
-| `public-plan` | 共有トークンを検証し、公開可能なプランだけを返す |
 
 `OPENAI_API_KEY`が未設定・無効、またはOpenAI APIが失敗した場合、`extract-notes`と`generate-plan`はAI結果を生成・適用せず、runをfailedにして画面へ明示的なエラーを返します。既存の付箋とプランは変更しません。
 
@@ -291,7 +286,7 @@ AIAU/
 │  ├─ hooks/             # 匿名session bootstrap
 │  ├─ pages/             # Home / Ideas / Plan / Calendar
 │  ├─ repositories/      # Supabase table・RPC・Realtime access
-│  ├─ services/          # AI、offline queue（未配線）
+│  ├─ services/          # AI連携
 │  ├─ test/              # UI contract / Supabase integration
 │  └─ types/             # Supabase生成型とdomain alias
 ├─ supabase/
@@ -310,7 +305,7 @@ AIAU/
 - **RLS**: 旅行データは`trip_members`のmembershipで分離
 - **Anonymous Auth**: ユーザーIDはSupabase Authから取得し、Client入力を信用しない
 - **RPC境界**: 旅行作成、参加、投票、確定、履歴復元、競合解決をDB側で検証
-- **Token**: invite/share tokenは生値をDB保存せず、SHA-256 hashを保存
+- **Token**: invite tokenは生値をDB保存せず、SHA-256 hashを保存
 - **Secret分離**: Service Role KeyとOpenAI API KeyはEdge Functionsだけで利用
 - **AI制約**: AIは付箋を削除できず、ユーザー編集済み付箋を自動上書きしない
 - **履歴**: plan snapshotを追記し、復元も新しいversionとして記録
@@ -386,8 +381,6 @@ SUPABASE_TEST_URL="$API_URL" SUPABASE_TEST_KEY="$PUBLISHABLE_KEY" npm run test:i
 
 - 匿名アカウントの端末間同期・復旧は未対応
 - 外部カレンダーとの双方向同期は未対応。現在はICS出力を提供
-- オフライン編集用の変更キュー（offline queue）は未配線。現在はオンライン保存時の同時更新競合のみ解決可能
-- 公開プラン取得APIは実装済みだが、共有リンク作成・閲覧用のフロントエンドUIは未実装
 - タイムラインは複数候補を保持できるが、OpenAIが複数候補を生成する保証はない
 - OpenAI APIが未設定または失敗した場合、AI付箋・プランは生成せず画面へエラーを表示
 - `mockups/` は設計資料であり、Reactアプリのデータソースではない
