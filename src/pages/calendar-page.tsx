@@ -14,9 +14,7 @@ import type {
   EventInput,
 } from '@fullcalendar/core'
 import jaLocale from '@fullcalendar/core/locales/ja'
-import dayGridPlugin from '@fullcalendar/daygrid'
 import interactionPlugin, { type DateClickArg } from '@fullcalendar/interaction'
-import listPlugin from '@fullcalendar/list'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import {
   AlertTriangle,
@@ -53,17 +51,9 @@ import { getPlanForTrip, listTrips } from '@/repositories/trips.repository'
 import type { Json } from '@/types/database'
 import type { CalendarEvent, OfflineConflict, Plan, Trip } from '@/types/domain'
 
-const CALENDAR_VIEWS = [
-  { id: 'timeGridDay', label: '日' },
-  { id: 'timeGridWeek', label: '週' },
-  { id: 'dayGridMonth', label: '月' },
-  { id: 'listMonth', label: 'アジェンダ' },
-] as const
-
 const FIELD_CLASS_NAME =
   'min-h-11 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none transition-shadow focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-60'
 
-type CalendarViewName = (typeof CALENDAR_VIEWS)[number]['id']
 type JsonObject = { [key: string]: Json | undefined }
 
 type VisibleRange = {
@@ -104,35 +94,38 @@ const dateTimeFormatter = new Intl.DateTimeFormat('ja-JP', {
   minute: '2-digit',
 })
 
-function getDefaultView(): CalendarViewName {
-  if (
-    typeof window !== 'undefined' &&
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(max-width: 640px)').matches
-  ) {
-    return 'listMonth'
-  }
-  return 'timeGridDay'
+const MAX_TRIP_DAYS = 7
+
+type TripRange = {
+  start: Date
+  days: number
 }
 
-function getInitialRange(view: CalendarViewName): VisibleRange {
+/** 旅行開始日から最大 7 日間の表示範囲を求める。
+ * 2 日間の旅行なら 2 日だけ表示し、終了日がなければ 7 日、開始日がなければ今日を起点にする */
+function getTripRange(trip: Trip | null | undefined): TripRange {
+  const fallback = new Date()
+  fallback.setHours(0, 0, 0, 0)
+  if (!trip?.starts_at) return { start: fallback, days: MAX_TRIP_DAYS }
+
+  const start = new Date(trip.starts_at)
+  if (Number.isNaN(start.getTime())) return { start: fallback, days: MAX_TRIP_DAYS }
+  start.setHours(0, 0, 0, 0)
+
+  if (!trip.ends_at) return { start, days: MAX_TRIP_DAYS }
+  const end = new Date(trip.ends_at)
+  if (Number.isNaN(end.getTime())) return { start, days: MAX_TRIP_DAYS }
+  end.setHours(0, 0, 0, 0)
+
+  const inclusiveDays = Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1
+  return { start, days: Math.min(Math.max(inclusiveDays, 1), MAX_TRIP_DAYS) }
+}
+
+function getInitialRange(): VisibleRange {
   const start = new Date()
   start.setHours(0, 0, 0, 0)
   const end = new Date(start)
-
-  if (view === 'timeGridWeek') {
-    const daysSinceMonday = (start.getDay() + 6) % 7
-    start.setDate(start.getDate() - daysSinceMonday)
-    end.setTime(start.getTime())
-    end.setDate(end.getDate() + 7)
-  } else if (view === 'dayGridMonth' || view === 'listMonth') {
-    start.setDate(1)
-    end.setTime(start.getTime())
-    end.setMonth(end.getMonth() + 1)
-  } else {
-    end.setDate(end.getDate() + 1)
-  }
-
+  end.setDate(end.getDate() + MAX_TRIP_DAYS)
   return { from: start.toISOString(), to: end.toISOString() }
 }
 
@@ -272,16 +265,12 @@ function ConflictSnapshot({ label, value }: { label: string; value: Json }) {
 }
 
 export function CalendarPage({ userId }: { userId: string }) {
-  const initialViewRef = useRef<CalendarViewName>(getDefaultView())
   const calendarRef = useRef<FullCalendar>(null)
   const refreshSequenceRef = useRef(0)
   const hasLoadedRef = useRef(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const [timezone] = useState(getBrowserTimezone)
-  const [visibleRange, setVisibleRange] = useState<VisibleRange>(() =>
-    getInitialRange(initialViewRef.current),
-  )
-  const [activeView, setActiveView] = useState<CalendarViewName>(initialViewRef.current)
+  const [visibleRange, setVisibleRange] = useState<VisibleRange>(getInitialRange)
   const [calendarTitle, setCalendarTitle] = useState(() => dateFormatter.format(new Date()))
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [conflicts, setConflicts] = useState<OfflineConflict[]>([])
@@ -316,6 +305,7 @@ export function CalendarPage({ userId }: { userId: string }) {
         : null,
     [exportTargets, selectedEvent],
   )
+  const tripRange = useMemo(() => getTripRange(selectedExportTarget?.trip), [selectedExportTarget])
 
   const fullCalendarEvents = useMemo<EventInput[]>(
     () =>
@@ -439,18 +429,11 @@ export function CalendarPage({ userId }: { userId: string }) {
 
   const handleDatesSet = useCallback((details: DatesSetArg) => {
     setCalendarTitle(details.view.title)
-    const view = CALENDAR_VIEWS.find((item) => item.id === details.view.type)
-    if (view) setActiveView(view.id)
     setVisibleRange((current) => {
       if (current.from === details.startStr && current.to === details.endStr) return current
       return { from: details.startStr, to: details.endStr }
     })
   }, [])
-
-  function changeView(view: CalendarViewName) {
-    calendarRef.current?.getApi().changeView(view)
-    setActiveView(view)
-  }
 
   function handleEventClick(details: EventClickArg) {
     const source = details.event.extendedProps.source === 'plan' ? 'plan' : 'personal'
@@ -622,7 +605,7 @@ export function CalendarPage({ userId }: { userId: string }) {
     }
   }
 
-  if (loading) return <LoadingState label="カレンダーを読み込み中" />
+  if (loading || exportTargetsLoading) return <LoadingState label="カレンダーを読み込み中" />
 
   const selectedAddress = selectedEvent
     ? getStringAttribute(selectedEvent.attrs, 'address', 'location')
@@ -673,28 +656,17 @@ export function CalendarPage({ userId }: { userId: string }) {
         <section aria-label="予定カレンダー" className="surface-card calendar-main">
           <div className="calendar-toolbar">
             <div className="calendar-date">
-              <button aria-label="前の期間" onClick={() => calendarRef.current?.getApi().prev()} type="button">‹</button>
               <span aria-live="polite">{calendarTitle}</span>
-              <button aria-label="次の期間" onClick={() => calendarRef.current?.getApi().next()} type="button">›</button>
-              <button className="calendar-today" onClick={() => calendarRef.current?.getApi().today()} type="button">今日</button>
+              <span className="calendar-trip-days">
+                {selectedExportTarget
+                  ? `「${selectedExportTarget.trip.title}」の旅程（${tripRange.days}日間）`
+                  : `旅行期間（最大${MAX_TRIP_DAYS}日間）`}
+              </span>
               {refreshing && (
                 <span className="calendar-refreshing" role="status">
                   <LoaderCircle aria-hidden="true" />更新中
                 </span>
               )}
-            </div>
-            <div aria-label="カレンダー表示" className="view-tabs" role="group">
-              {CALENDAR_VIEWS.map((view) => (
-                <button
-                  aria-pressed={activeView === view.id}
-                  className={`view-tab${activeView === view.id ? ' active' : ''}`}
-                  key={view.id}
-                  onClick={() => changeView(view.id)}
-                  type="button"
-                >
-                  {view.label}
-                </button>
-              ))}
             </div>
           </div>
 
@@ -706,6 +678,7 @@ export function CalendarPage({ userId }: { userId: string }) {
 
           <div className="calendar-fullcalendar calendar-view">
             <FullCalendar
+              key={`${selectedExportTarget?.trip.id ?? 'no-trip'}:${tripRange.days}:${tripRange.start.toISOString()}`}
               ref={calendarRef}
               allDayText="終日"
               dayMaxEvents
@@ -716,17 +689,17 @@ export function CalendarPage({ userId }: { userId: string }) {
               eventTimeFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
               events={fullCalendarEvents}
               expandRows
-              firstDay={1}
               headerToolbar={false}
               height="auto"
-              initialView={initialViewRef.current}
+              initialDate={tripRange.start}
+              initialView="tripGrid"
               locale={jaLocale}
-              noEventsContent={() => <p className="calendar-empty">この期間に予定はありません</p>}
               nowIndicator
-              plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
+              plugins={[timeGridPlugin, interactionPlugin]}
               scrollTime="08:00:00"
               slotEventOverlap={false}
               stickyHeaderDates
+              views={{ tripGrid: { type: 'timeGrid', duration: { days: tripRange.days } } }}
             />
           </div>
         </section>
