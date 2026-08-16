@@ -21,7 +21,9 @@ export type RejectedOption = {
 
 export type Timeline = {
   conflictRows: TimelineGroup[][]
+  /** 採用済みの予定と、競合がなくそのまま反映される予定。 */
   confirmedRows: TimelineGroup[][]
+  /** confirmedRowsのうち、投票を経ていない競合なしの予定。 */
   settledOptions: PlanOption[]
   rejectedOptions: RejectedOption[]
   /** 競合グループの通し番号。ラベルと色を日単位で一意にする。 */
@@ -77,7 +79,7 @@ export function packGroups(groups: TimelineGroup[]): TimelineGroup[][] {
   return rows
 }
 
-/** slotの持ち方に依存せず、実時間の重なりだけで競合・競合なし・確定・不採用へ振り分ける。 */
+/** slotの持ち方に依存せず、実時間の重なりだけで競合・確定・不採用へ振り分ける。 */
 export function buildTimeline(slots: PlanSlot[], optionsBySlot: Map<string, PlanOption[]>): Timeline {
   const openEntries: SlotEntry[] = []
   const confirmedGroups: TimelineGroup[] = []
@@ -119,9 +121,10 @@ export function buildTimeline(slots: PlanSlot[], optionsBySlot: Map<string, Plan
 
   const openGroups = buildOpenGroups(remainingEntries)
   const conflictGroups = openGroups.filter((group) => group.entries.length > 1)
-  const settledOptions = openGroups
-    .filter((group) => group.entries.length === 1)
-    .map((group) => group.entries[0].option)
+  const settledGroups = openGroups.filter((group) => group.entries.length === 1)
+  const settledOptions = settledGroups.map((group) => group.entries[0].option)
+  // 競合していない予定は投票の必要がないので、確定した予定と同じ行に並べる。
+  confirmedGroups.push(...settledGroups)
   rejectedOptions.sort((left, right) => timestamp(left.option.start_at) - timestamp(right.option.start_at))
   settledOptions.sort((left, right) => timestamp(left.start_at) - timestamp(right.start_at))
 

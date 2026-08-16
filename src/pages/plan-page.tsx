@@ -359,7 +359,7 @@ export function PlanPage({ userId }: { userId: string }) {
           </div>
 
           <div className="timeline-guide">
-            投票できるのは時間が競合している案だけです。開始・終了時刻が重なる予定は、別々に生成されていても同じ競合グループにまとめます。時間が重なっていない競合は同じ行にまとめ、囲み枠と「競合A / 競合B」のラベルでどれとどれが同じ投票の選択肢かを示します。確定した予定を上段に、競合していない予定と不採用の案は下段の行にまとめています。採用案と時間が重なったまま残った案は、別々に生成されていても不採用の行に移します。
+            投票できるのは時間が競合している案だけです。開始・終了時刻が重なる予定は、別々に生成されていても同じ競合グループにまとめます。時間が重なっていない競合は同じ行にまとめ、囲み枠と「競合A / 競合B」のラベルでどれとどれが同じ投票の選択肢かを示します。確定した予定と競合していない予定は上段の行にまとめ、採用案と時間が重なったまま残った案は別々に生成されていても下段の不採用の行に移します。
           </div>
           <div aria-label="予定の種類" className="plan-legend">
             <span className="plan-legend-item">
@@ -463,12 +463,9 @@ type TimelineRowsProps = {
 }
 
 function TimelineRows({ slots, optionsBySlot, ...props }: TimelineRowsProps) {
-  const { conflictRows, confirmedRows, settledOptions, rejectedOptions, conflictNumbers } = buildTimeline(
-    slots,
-    optionsBySlot,
-  )
+  const { conflictRows, confirmedRows, rejectedOptions, conflictNumbers } = buildTimeline(slots, optionsBySlot)
 
-  if (settledOptions.length === 0 && conflictRows.length === 0 && confirmedRows.length === 0) {
+  if (conflictRows.length === 0 && confirmedRows.length === 0) {
     return (
       <div className="timeline-rows">
         <section className="timeline-row">
@@ -503,9 +500,6 @@ function TimelineRows({ slots, optionsBySlot, ...props }: TimelineRowsProps) {
           {...props}
         />
       ))}
-      {settledOptions.length > 0 && (
-        <SettledRow options={settledOptions} scale={props.scale} timeZone={props.timeZone} tripId={props.tripId} />
-      )}
       {rejectedOptions.length > 0 && (
         <RejectedRow
           entries={rejectedOptions}
@@ -553,48 +547,6 @@ function RejectedRow({ entries, scale, timeZone, tripId }: RejectedRowProps) {
                 timeZone={timeZone}
                 tripId={tripId}
                 variant="option"
-              />
-            ))}
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-type SettledRowProps = {
-  options: PlanOption[]
-  scale: TimelineScale
-  timeZone: string
-  tripId: string
-}
-
-function SettledRow({ options, scale, timeZone, tripId }: SettledRowProps) {
-  const start = options[0].start_at
-  const end = options.reduce(
-    (latest, option) => (timestamp(option.end_at) > timestamp(latest) ? option.end_at : latest),
-    options[0].end_at,
-  )
-
-  return (
-    <section aria-label="競合していない予定" className="timeline-row settled-row">
-      <div className="row-label settled-label">
-        <span className="candidate-name">競合なしの予定</span>
-        <strong>{formatTimeRange(start, end, timeZone)}</strong>
-        <span className="candidate-meta">{options.length}件・投票せずにそのまま反映</span>
-      </div>
-      <div className="time-track">
-        {assignLanes(options).map((lane) => (
-          <div className="option-lane" key={lane[0].id}>
-            {lane.map((option) => (
-              <ScheduleBlock
-                key={option.id}
-                option={option}
-                originLabel={option.note_id ? `${kindLabel(option.kind)}の予定` : 'AIが空き時間に提案'}
-                scale={scale}
-                timeZone={timeZone}
-                tripId={tripId}
-                variant="ai-suggestion"
               />
             ))}
           </div>
@@ -656,7 +608,7 @@ function SlotRow({
         <strong>{formatTimeRange(toIsoString(rowStart), toIsoString(rowEnd), timeZone)}</strong>
         <span className="candidate-meta">
           {isConfirmedRow
-            ? `${groups.length}件・採用案を確定済み`
+            ? `${groups.length}件・採用済みと競合なしの予定`
             : previewMode
               ? `${groups.length}件の競合・履歴プレビュー`
               : `${groups.length}件の競合・${optionCount}案から投票`}
@@ -672,7 +624,7 @@ function SlotRow({
               style={{ ...timelineSpanStyle(group, scale), '--group-accent': groupAccent(groupIndex) } as CSSProperties}
             >
               <span className="slot-band-label">
-                {isConfirmedRow ? '確定' : `競合${groupLabel(groupIndex)}`}
+                {isConfirmedRow ? (group.entries[0]?.slot.status === 'confirmed' ? '確定' : '競合なし') : `競合${groupLabel(groupIndex)}`}
                 {' '}
                 {formatTimeRange(toIsoString(group.start), toIsoString(group.end), timeZone)}
                 {isConfirmedRow ? '' : ` ・ ${group.entries.length}案から1つ`}
@@ -759,6 +711,8 @@ function SlotOptionBlock({
 
   const slotIsConfirmed = slot.status === 'confirmed'
   const isConfirmedOption = slot.confirmed_option_id === option.id
+  // 競合していない予定には選びようがないので、確定済みと同じように投票を出さない。
+  const isSoleOption = !slotIsConfirmed && group.entries.length === 1
   const count = countFor(entry)
   const isOwnVote = ownEntry?.option.id === option.id
   const isTop = topOptionIds.has(option.id)
@@ -773,16 +727,22 @@ function SlotOptionBlock({
           ? isConfirmedOption
             ? '採用済み'
             : '不採用'
-          : `競合${groupLabel(groupIndex)}の候補 ${lane + 1}/${group.entries.length}`
+          : isSoleOption
+            ? option.note_id
+              ? `${kindLabel(option.kind)}の予定`
+              : 'AIが空き時間に提案'
+            : `競合${groupLabel(groupIndex)}の候補 ${lane + 1}/${group.entries.length}`
       }
       rejected={slotIsConfirmed && !isConfirmedOption}
       scale={scale}
       timeZone={timeZone}
       tripId={tripId}
-      variant={isConfirmedOption ? 'draft' : 'option'}
+      variant={isConfirmedOption ? 'draft' : isSoleOption ? 'ai-suggestion' : 'option'}
     >
       {previewMode ? (
         <span className="schedule-reason">履歴には投票数が保存されていません</span>
+      ) : isSoleOption ? (
+        <span className="schedule-reason">時間が競合していないため、投票せずに反映されます</span>
       ) : slotIsConfirmed ? (
         <span className="schedule-reason">
           {isConfirmedOption ? 'この案が採用されています' : '別の案が採用されています'}
