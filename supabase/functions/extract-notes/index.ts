@@ -104,7 +104,12 @@ Deno.serve(async (request) => {
       'The attrs object may contain only address, lat, lng, duration, time_hint, and cost.',
       'Preserve an exact requested clock time or time of day in attrs.time_hint. Store duration as minutes and cost as a number when stated.',
       'The source value must be an id from new_messages. The target value must be an id from existing_notes.',
-      'Add only concrete travel places or activities. Return an empty operations array for casual conversation.',
+      'Add a note for every message that states a place the trip members want to visit or a thing they want to do, even when it is a named spot such as a temple or a restaurant.',
+      'Also add a note when the wish has no proper place name, for example a nearby hot spring, a cafe with a nice view, or somewhere to see fireflies. Treat vague wishes as valid plan candidates.',
+      'Keep the requested wording of the wish in the title, and put extra conditions or nuance from the message in memo.',
+      'Never invent a place name, address, lat, lng, cost, or duration that the message does not state. Omit attrs you do not know instead of guessing.',
+      'Interpret Japanese context words such as yappari, mo, ato, and chikaba together with the other new_messages and existing_notes so that follow-up wishes are still captured.',
+      'Return an empty operations array only for casual conversation that expresses no wish about where to go or what to do.',
       'Never use keys named operation or source_message_uuid. Never return delete.',
       'Never update or hold a note whose user_touched value is true.',
     ].join(' ')
